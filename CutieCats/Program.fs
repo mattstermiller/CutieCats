@@ -12,6 +12,7 @@ module Extensions =
         member this.ToPoint2 () = Point2(this.X, this.Y)
 
     type Size2 with
+        member this.ToVector2 () = Vector2(this.Width, this.Height)
         member this.Scale (scale: Vector2) = Size2(this.Width * scale.X, this.Height * scale.Y)
 
 type Viewport = {
@@ -49,19 +50,54 @@ with
 module Rand =
     let instance = Random()
 
+type IUpdate =
+    abstract member Update: elapsedSeconds: float32 -> unit
+
+type IDraw =
+    abstract member Draw: Viewport -> SpriteBatch -> unit
+
 type Star() =
     let size = Rand.instance.NextSingle() * 4f + 2f
     let mutable pos = Vector2(Rand.instance.NextSingle(), Rand.instance.NextSingle())
+    let speed = 0.05f
 
-    member _.Update(elapsedSec) =
-        let x = pos.X - 0.05f * elapsedSec
-        pos <-
-            if x < 0f
-            then Vector2(x + 1f, Rand.instance.NextSingle())
-            else Vector2(x, pos.Y)
+    interface IUpdate with
+        member _.Update(elapsedSec) =
+            let x = pos.X - (speed * elapsedSec)
+            pos <-
+                if x < 0f
+                then Vector2(x + 1f, Rand.instance.NextSingle())
+                else Vector2(x, pos.Y)
 
-    member _.Draw (viewport: Viewport) (spriteBatch: SpriteBatch) =
-        spriteBatch.DrawPoint(viewport.GetScreenPos(pos), Color.Yellow, size)
+    interface IDraw with
+        member _.Draw viewport spriteBatch =
+            spriteBatch.DrawPoint(viewport.GetScreenPos(pos), Color.Yellow, size)
+
+type CatShip() =
+    let size = Size2(0.08f, 0.08f)
+    let mutable pos = Vector2(0.2f, 0.5f)
+    let mutable vel = Vector2.Zero
+    let speed = 0.15f
+
+    let radius = size/2f
+    let posMin = radius.ToVector2()
+    let posMax = Vector2.One - posMin
+
+    member _.SetDir (dir: Vector2) =
+        vel <-
+            if dir = Vector2.Zero
+            then dir
+            else Vector2.Normalize dir * speed
+
+    interface IUpdate with
+        member _.Update elapsedSec =
+            pos <-
+                pos + (vel * elapsedSec)
+                |> fun v -> Vector2.Clamp(v, posMin, posMax)
+
+    interface IDraw with
+        member _.Draw viewport spriteBatch =
+            spriteBatch.DrawEllipse(viewport.GetScreenPos(pos), viewport.GetScreenSize(radius), 20, Color.Orange, 20f)
 
 type CutieCatsGame() as this =
     inherit Game()
@@ -70,21 +106,42 @@ type CutieCatsGame() as this =
     let mutable spriteBatch = Unchecked.defaultof<SpriteBatch>
 
     let mutable viewport = Viewport.Default
-    let mutable stars = Array.init 100 (fun _ -> Star())
+    let stars = Array.init 100 (fun _ -> Star())
+    let catShip = CatShip()
 
     override __.LoadContent() =
         spriteBatch <- new SpriteBatch(this.GraphicsDevice)
         viewport <- Viewport.Create(this.GraphicsDevice.Viewport.Bounds, Vector2.One, Vector2.One/2f, true)
 
     override __.Update(gameTime) =
-        let ms = gameTime.ElapsedGameTime.TotalSeconds |> single
-        stars |> Array.iter (fun s -> s.Update ms)
+        let ms = gameTime.GetElapsedSeconds() |> single
+        let update (a: IUpdate) = a.Update ms
+
+        let pressedKeys = Keyboard.GetState().GetPressedKeys()
+        let isPressed key = pressedKeys |> Array.contains key
+        if isPressed Keys.Escape then
+            this.Exit()
+
+        catShip.SetDir (
+            seq {
+                if isPressed Keys.Up || isPressed Keys.K then Vector2(0f, 1f)
+                if isPressed Keys.Down || isPressed Keys.J then Vector2(0f, -1f)
+                if isPressed Keys.Right || isPressed Keys.L then Vector2(1f, 0f)
+                if isPressed Keys.Left || isPressed Keys.H then Vector2(-1f, 0f)
+            } |> Seq.fold (+) Vector2.Zero
+        )
+
+        stars |> Array.iter update
+        update catShip
 
     override __.Draw(gameTime) =
         this.GraphicsDevice.Clear Color.Black
+        let draw (a: IDraw) = a.Draw viewport spriteBatch
+
         spriteBatch.Begin()
 
-        stars |> Array.iter (fun s -> s.Draw viewport spriteBatch)
+        stars |> Array.iter draw
+        draw catShip
 
         spriteBatch.End()
 
