@@ -1,4 +1,4 @@
-﻿namespace SuperPong
+namespace SuperPong
 
 open System
 open Microsoft.Xna.Framework
@@ -10,6 +10,7 @@ open MonoGame.Extended
 module Extensions =
     type Vector2 with
         member this.ToPoint2 () = Point2(this.X, this.Y)
+        static member NormalizeOrZero (v: Vector2) = if v = Vector2.Zero then v else v |> Vector2.Normalize
 
     type Size2 with
         member this.ToVector2 () = Vector2(this.Width, this.Height)
@@ -83,11 +84,10 @@ type CatShip() =
     let posMin = radius.ToVector2()
     let posMax = Vector2.One - posMin
 
+    member _.Pos = pos
+
     member _.SetDir (dir: Vector2) =
-        vel <-
-            if dir = Vector2.Zero
-            then dir
-            else Vector2.Normalize dir * speed
+        vel <- (Vector2.NormalizeOrZero dir) * speed
 
     interface IUpdate with
         member _.Update elapsedSec =
@@ -99,6 +99,27 @@ type CatShip() =
         member _.Draw viewport spriteBatch =
             spriteBatch.DrawEllipse(viewport.GetScreenPos(pos), viewport.GetScreenSize(radius), 20, Color.Orange, 20f)
 
+type MouseShip(catShip: CatShip) =
+    let size = Size2(0.10f, 0.12f)
+    let mutable pos = Vector2(0.8f, 0.5f)
+    let speed = 0.1f
+
+    let radius = size/2f
+    let posMin = radius.ToVector2()
+    let posMax = Vector2.One - posMin
+
+    interface IUpdate with
+        member _.Update elapsedSec =
+            let dir = Vector2(0f, catShip.Pos.Y - pos.Y) |> Vector2.NormalizeOrZero
+            let vel = dir * speed
+            pos <-
+                pos + (vel * elapsedSec)
+                |> fun v -> Vector2.Clamp(v, posMin, posMax)
+
+    interface IDraw with
+        member _.Draw viewport spriteBatch =
+            spriteBatch.DrawEllipse(viewport.GetScreenPos(pos), viewport.GetScreenSize(radius), 20, Color.Gray, 30f)
+
 type CutieCatsGame() as this =
     inherit Game()
 
@@ -108,6 +129,7 @@ type CutieCatsGame() as this =
     let mutable viewport = Viewport.Default
     let stars = Array.init 100 (fun _ -> Star())
     let catShip = CatShip()
+    let mouseShip = MouseShip(catShip)
 
     override __.LoadContent() =
         spriteBatch <- new SpriteBatch(this.GraphicsDevice)
@@ -133,6 +155,7 @@ type CutieCatsGame() as this =
 
         stars |> Array.iter update
         update catShip
+        update mouseShip
 
     override __.Draw(gameTime) =
         this.GraphicsDevice.Clear Color.Black
@@ -142,6 +165,7 @@ type CutieCatsGame() as this =
 
         stars |> Array.iter draw
         draw catShip
+        draw mouseShip
 
         spriteBatch.End()
 
