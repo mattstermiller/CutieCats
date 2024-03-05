@@ -77,8 +77,8 @@ type Star() =
 type CatShip() =
     let size = Size2(0.08f, 0.08f)
     let mutable pos = Vector2(0.2f, 0.5f)
-    let mutable vel = Vector2.Zero
-    let speed = 0.15f
+    let mutable dir = Vector2.Zero
+    let speed = 0.25f
 
     let radius = size/2f
     let posMin = radius.ToVector2()
@@ -86,14 +86,16 @@ type CatShip() =
 
     member _.Pos = pos
 
-    member _.SetDir (dir: Vector2) =
-        vel <- (Vector2.NormalizeOrZero dir) * speed
-
     interface IUpdate with
         member _.Update elapsedSec =
+            let vel = (Vector2.NormalizeOrZero dir) * speed
             pos <-
                 pos + (vel * elapsedSec)
                 |> fun v -> Vector2.Clamp(v, posMin, posMax)
+            dir <- Vector2.Zero
+
+    member _.AddDir (newDir: Vector2) =
+        dir <- dir + newDir
 
     interface IDraw with
         member _.Draw viewport spriteBatch =
@@ -120,6 +122,38 @@ type MouseShip(catShip: CatShip) =
         member _.Draw viewport spriteBatch =
             spriteBatch.DrawEllipse(viewport.GetScreenPos(pos), viewport.GetScreenSize(radius), 20, Color.Gray, 30f)
 
+module Dir =
+    let up = Vector2(0f, 1f)
+    let down = Vector2(0f, -1f)
+    let right = Vector2(1f, 0f)
+    let left = Vector2(-1f, 0f)
+
+type GameEvent =
+    | CatShipDir of Vector2
+    | Exit
+
+type GameState(exitFunc) =
+    let stars = Array.init 100 (fun _ -> Star())
+    let catShip = CatShip()
+    let mouseShip = MouseShip(catShip)
+
+    member _.HandleEvent (evt: GameEvent) =
+        match evt with
+        | CatShipDir dir -> catShip.AddDir dir
+        | Exit -> exitFunc()
+
+    member _.Update elapsedSec =
+        let update (a: IUpdate) = a.Update elapsedSec
+        stars |> Array.iter update
+        update catShip
+        update mouseShip
+
+    member _.Draw viewport spriteBatch =
+        let draw (a: IDraw) = a.Draw viewport spriteBatch
+        stars |> Array.iter draw
+        draw catShip
+        draw mouseShip
+
 type CutieCatsGame() as this =
     inherit Game()
 
@@ -127,45 +161,37 @@ type CutieCatsGame() as this =
     let mutable spriteBatch = Unchecked.defaultof<SpriteBatch>
 
     let mutable viewport = Viewport.Default
-    let stars = Array.init 100 (fun _ -> Star())
-    let catShip = CatShip()
-    let mouseShip = MouseShip(catShip)
+    let state = GameState(this.Exit)
+
+    let keyBinds = Map [
+        Keys.Escape, Exit
+        Keys.Up, CatShipDir Dir.up
+        Keys.K, CatShipDir Dir.up
+        Keys.Down, CatShipDir Dir.down
+        Keys.J, CatShipDir Dir.down
+        Keys.Right, CatShipDir Dir.right
+        Keys.L, CatShipDir Dir.right
+        Keys.Left, CatShipDir Dir.left
+        Keys.H, CatShipDir Dir.left
+    ]
 
     override __.LoadContent() =
         spriteBatch <- new SpriteBatch(this.GraphicsDevice)
         viewport <- Viewport.Create(this.GraphicsDevice.Viewport.Bounds, Vector2.One, Vector2.One/2f, true)
 
     override __.Update(gameTime) =
-        let ms = gameTime.GetElapsedSeconds() |> single
-        let update (a: IUpdate) = a.Update ms
+        Keyboard.GetState().GetPressedKeys()
+        |> Seq.choose (fun key -> Map.tryFind key keyBinds)
+        |> Seq.iter (state.HandleEvent)
 
-        let pressedKeys = Keyboard.GetState().GetPressedKeys()
-        let isPressed key = pressedKeys |> Array.contains key
-        if isPressed Keys.Escape then
-            this.Exit()
-
-        catShip.SetDir (
-            seq {
-                if isPressed Keys.Up || isPressed Keys.K then Vector2(0f, 1f)
-                if isPressed Keys.Down || isPressed Keys.J then Vector2(0f, -1f)
-                if isPressed Keys.Right || isPressed Keys.L then Vector2(1f, 0f)
-                if isPressed Keys.Left || isPressed Keys.H then Vector2(-1f, 0f)
-            } |> Seq.fold (+) Vector2.Zero
-        )
-
-        stars |> Array.iter update
-        update catShip
-        update mouseShip
+        state.Update (gameTime.GetElapsedSeconds() |> single)
 
     override __.Draw(gameTime) =
         this.GraphicsDevice.Clear Color.Black
-        let draw (a: IDraw) = a.Draw viewport spriteBatch
 
         spriteBatch.Begin()
 
-        stars |> Array.iter draw
-        draw catShip
-        draw mouseShip
+        state.Draw viewport spriteBatch
 
         spriteBatch.End()
 
