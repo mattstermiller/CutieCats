@@ -92,10 +92,9 @@ type CatShip() =
             pos <-
                 pos + (vel * elapsedSec)
                 |> fun v -> Vector2.Clamp(v, posMin, posMax)
-            dir <- Vector2.Zero
 
-    member _.AddDir (newDir: Vector2) =
-        dir <- dir + newDir
+    member _.AddDir (dirChange: Vector2) =
+        dir <- dir + dirChange
 
     interface IDraw with
         member _.Draw viewport spriteBatch =
@@ -122,25 +121,42 @@ type MouseShip(catShip: CatShip) =
         member _.Draw viewport spriteBatch =
             spriteBatch.DrawEllipse(viewport.GetScreenPos(pos), viewport.GetScreenSize(radius), 20, Color.Gray, 30f)
 
-module Dir =
-    let up = Vector2(0f, 1f)
-    let down = Vector2(0f, -1f)
-    let right = Vector2(1f, 0f)
-    let left = Vector2(-1f, 0f)
+type Dir =
+    | Up
+    | Down
+    | Right
+    | Left
+with
+    member this.Vec =
+        match this with
+        | Up -> Vector2(0f, 1f)
+        | Down -> Vector2(0f, -1f)
+        | Right -> Vector2(1f, 0f)
+        | Left -> Vector2(-1f, 0f)
 
-type GameEvent =
-    | CatShipDir of Vector2
+type SignalState =
+    | CatShipDir of Dir
+
+type SignalAction =
     | Exit
+
+type Signal =
+    | Action of SignalAction
+    | State of SignalState
+
+type SignalEvent =
+    | DoAction of SignalAction
+    | StateChange of SignalState * bool
 
 type GameState(exitFunc) =
     let stars = Array.init 100 (fun _ -> Star())
     let catShip = CatShip()
     let mouseShip = MouseShip(catShip)
 
-    member _.HandleEvent (evt: GameEvent) =
+    member _.HandleEvent (evt: SignalEvent) =
         match evt with
-        | CatShipDir dir -> catShip.AddDir dir
-        | Exit -> exitFunc()
+        | StateChange (CatShipDir dir, started) -> catShip.AddDir (dir.Vec * if started then 1f else -1f)
+        | DoAction Exit -> exitFunc()
 
     member _.Update elapsedSec =
         let update (a: IUpdate) = a.Update elapsedSec
@@ -154,6 +170,19 @@ type GameState(exitFunc) =
         draw catShip
         draw mouseShip
 
+module KeyBinding =
+    let bindings = Map [
+        Keys.Escape, Action Exit
+        Keys.Up, State (CatShipDir Up)
+        Keys.K, State (CatShipDir Up)
+        Keys.Down, State (CatShipDir Down)
+        Keys.J, State (CatShipDir Down)
+        Keys.Right, State (CatShipDir Right)
+        Keys.L, State (CatShipDir Right)
+        Keys.Left, State (CatShipDir Left)
+        Keys.H, State (CatShipDir Left)
+    ]
+
 type CutieCatsGame() as this =
     inherit Game()
 
@@ -162,27 +191,30 @@ type CutieCatsGame() as this =
 
     let mutable viewport = Viewport.Default
     let state = GameState(this.Exit)
-
-    let keyBinds = Map [
-        Keys.Escape, Exit
-        Keys.Up, CatShipDir Dir.up
-        Keys.K, CatShipDir Dir.up
-        Keys.Down, CatShipDir Dir.down
-        Keys.J, CatShipDir Dir.down
-        Keys.Right, CatShipDir Dir.right
-        Keys.L, CatShipDir Dir.right
-        Keys.Left, CatShipDir Dir.left
-        Keys.H, CatShipDir Dir.left
-    ]
+    let mutable signalState = []
 
     override __.LoadContent() =
         spriteBatch <- new SpriteBatch(this.GraphicsDevice)
         viewport <- Viewport.Create(this.GraphicsDevice.Viewport.Bounds, Vector2.One, Vector2.One/2f, true)
 
     override __.Update(gameTime) =
-        Keyboard.GetState().GetPressedKeys()
-        |> Seq.choose (fun key -> Map.tryFind key keyBinds)
-        |> Seq.iter (state.HandleEvent)
+        let signals =
+            Keyboard.GetState().GetPressedKeys()
+            |> Seq.choose (fun key -> Map.tryFind key KeyBinding.bindings)
+            |> Seq.toList
+        let newSignalState = signals |> List.choose (function State s -> Some s | _ -> None)
+
+        signals
+        |> Seq.choose (function
+            | Action a -> Some (DoAction a)
+            | State s -> if not (signalState |> List.contains s) then Some (StateChange (s, true)) else None
+        )
+        |> Seq.append (
+            signalState |> Seq.except newSignalState |> Seq.map (fun s -> StateChange (s, false))
+        )
+        |> Seq.iter state.HandleEvent
+
+        signalState <- newSignalState
 
         state.Update (gameTime.GetElapsedSeconds() |> single)
 
