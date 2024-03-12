@@ -86,15 +86,14 @@ type CatShip() =
 
     member _.Pos = pos
 
+    member _.SetDir (newDir: Vector2) = dir <- newDir
+
     interface IUpdate with
         member _.Update elapsedSec =
             let vel = (Vector2.NormalizeOrZero dir) * speed
             pos <-
                 pos + (vel * elapsedSec)
                 |> fun v -> Vector2.Clamp(v, posMin, posMax)
-
-    member _.AddDir (dirChange: Vector2) =
-        dir <- dir + dirChange
 
     interface IDraw with
         member _.Draw viewport spriteBatch =
@@ -134,29 +133,19 @@ with
         | Right -> Vector2(1f, 0f)
         | Left -> Vector2(-1f, 0f)
 
-type SignalState =
-    | CatShipDir of Dir
-
-type SignalAction =
+type GameEvent =
+    | CatShipDir of Vector2
     | Exit
-
-type Signal =
-    | Action of SignalAction
-    | State of SignalState
-
-type SignalEvent =
-    | DoAction of SignalAction
-    | StateChange of SignalState * bool
 
 type GameState(exitFunc) =
     let stars = Array.init 100 (fun _ -> Star())
     let catShip = CatShip()
     let mouseShip = MouseShip(catShip)
 
-    member _.HandleEvent (evt: SignalEvent) =
+    member _.HandleEvent (evt: GameEvent) =
         match evt with
-        | StateChange (CatShipDir dir, started) -> catShip.AddDir (dir.Vec * if started then 1f else -1f)
-        | DoAction Exit -> exitFunc()
+        | CatShipDir dir -> catShip.SetDir dir
+        | Exit -> exitFunc()
 
     member _.Update elapsedSec =
         let update (a: IUpdate) = a.Update elapsedSec
@@ -170,17 +159,55 @@ type GameState(exitFunc) =
         draw catShip
         draw mouseShip
 
+type Signal<'a>(initialValue: 'a) =
+    let evt = Event<'a>()
+    let obs = evt.Publish
+    let mutable value = initialValue
+
+    interface IObservable<'a> with
+        member _.Subscribe o = obs.Subscribe o
+
+    member _.Value = value
+
+    member _.Trigger newValue =
+        value <- newValue
+        evt.Trigger newValue
+
+type BindingSignals() =
+    member val UpdateStart = Event<unit>()
+    member val CatShipUp = Signal<bool>(false)
+    member val CatShipDown = Signal<bool>(false)
+    member val CatShipRight = Signal<bool>(false)
+    member val CatShipLeft = Signal<bool>(false)
+    member val Exit = Event<unit>()
+with
+    member this.gameEvents () =
+        [
+            this.UpdateStart.Publish |> Observable.map (fun () ->
+                seq {
+                    if this.CatShipUp.Value then Up.Vec
+                    if this.CatShipDown.Value then Down.Vec
+                    if this.CatShipRight.Value then Right.Vec
+                    if this.CatShipLeft.Value then Left.Vec
+                }
+                |> Seq.fold (+) Vector2.Zero
+                |> CatShipDir
+            )
+            this.Exit.Publish |> Observable.map (fun () -> Exit)
+        ]
+        |> Seq.reduce Observable.merge
+
 module KeyBinding =
-    let bindings = Map [
-        Keys.Escape, Action Exit
-        Keys.Up, State (CatShipDir Up)
-        Keys.K, State (CatShipDir Up)
-        Keys.Down, State (CatShipDir Down)
-        Keys.J, State (CatShipDir Down)
-        Keys.Right, State (CatShipDir Right)
-        Keys.L, State (CatShipDir Right)
-        Keys.Left, State (CatShipDir Left)
-        Keys.H, State (CatShipDir Left)
+    let bindings (signals: BindingSignals) = Map [
+        Keys.Escape, ignore >> signals.Exit.Trigger
+        Keys.Up, signals.CatShipUp.Trigger
+        Keys.K, signals.CatShipUp.Trigger
+        Keys.Down, signals.CatShipDown.Trigger
+        Keys.J, signals.CatShipDown.Trigger
+        Keys.Right, signals.CatShipRight.Trigger
+        Keys.L, signals.CatShipRight.Trigger
+        Keys.Left, signals.CatShipLeft.Trigger
+        Keys.H, signals.CatShipLeft.Trigger
     ]
 
 type CutieCatsGame() as this =
@@ -190,41 +217,38 @@ type CutieCatsGame() as this =
     let mutable spriteBatch = Unchecked.defaultof<SpriteBatch>
 
     let mutable viewport = Viewport.Default
+    let keyEvents = Event<Keys * bool>()
     let state = GameState(this.Exit)
-    let mutable signalState = []
+    let signals = BindingSignals ()
+    let mutable pressedKeys = [||]
+
+    let generateKeyEvents () =
+        let newPressedKeys = Keyboard.GetState().GetPressedKeys()
+        Seq.append
+            (pressedKeys |> Seq.except newPressedKeys |> Seq.map (fun k -> k, false))
+            (newPressedKeys |> Seq.except pressedKeys |> Seq.map (fun k -> k, true))
+        |> Seq.iter keyEvents.Trigger
+        pressedKeys <- newPressedKeys
 
     override __.LoadContent() =
         spriteBatch <- new SpriteBatch(this.GraphicsDevice)
         viewport <- Viewport.Create(this.GraphicsDevice.Viewport.Bounds, Vector2.One, Vector2.One/2f, true)
 
+        let bindMap = KeyBinding.bindings signals
+        keyEvents.Publish.Add (fun (key, pressed) -> bindMap.TryFind key |> Option.iter (fun f -> f pressed))
+
+        signals.gameEvents().Add(state.HandleEvent)
+
     override __.Update(gameTime) =
-        let signals =
-            Keyboard.GetState().GetPressedKeys()
-            |> Seq.choose (fun key -> Map.tryFind key KeyBinding.bindings)
-            |> Seq.toList
-        let newSignalState = signals |> List.choose (function State s -> Some s | _ -> None)
-
-        signals
-        |> Seq.choose (function
-            | Action a -> Some (DoAction a)
-            | State s -> if not (signalState |> List.contains s) then Some (StateChange (s, true)) else None
-        )
-        |> Seq.append (
-            signalState |> Seq.except newSignalState |> Seq.map (fun s -> StateChange (s, false))
-        )
-        |> Seq.iter state.HandleEvent
-
-        signalState <- newSignalState
-
+        signals.UpdateStart.Trigger ()
+        generateKeyEvents ()
         state.Update (gameTime.GetElapsedSeconds() |> single)
 
     override __.Draw(gameTime) =
         this.GraphicsDevice.Clear Color.Black
 
         spriteBatch.Begin()
-
         state.Draw viewport spriteBatch
-
         spriteBatch.End()
 
 module Entry =
