@@ -69,20 +69,63 @@ type MouseShip(catShip: CatShip) =
         member _.Draw viewport spriteBatch =
             spriteBatch.DrawEllipse(viewport.GetScreenPos(pos), viewport.GetScreenSize(radius), 20, Color.Gray, 30f)
 
+type Projectile(initPos: Vector2, vel: Vector2) =
+    let mutable isDestroyed = false
+    let mutable pos = initPos
+    let size = Size2(0.02f, 0.015f)
+
+    let radius = size/2f
+
+    member _.IsDestroyed = isDestroyed
+
+    interface IActor with
+        member _.Update elapsedSec =
+            pos <- pos + vel * elapsedSec
+            // TODO: detect collision and create Hit event
+            if pos.X > (1.0f + size.Width) then
+                isDestroyed <- true
+
+        member _.Draw viewport spriteBatch =
+            spriteBatch.DrawEllipse(viewport.GetScreenPos(pos), viewport.GetScreenSize(radius), 20, Color.Red, 5f)
+
+type Weapon(getFirePos) =
+    let refireTime = 0.5f
+    let projectileVel = Vector2(0.2f, 0f)
+    let mutable refireTimeLeft = 0f
+    let mutable projectiles: Projectile list = []
+
+    member val IsFiring = false with get, set
+
+    interface IActor with
+        member this.Update elapsedSec =
+            projectiles |> List.iter (fun p -> (p :> IActor).Update elapsedSec)
+            projectiles <- projectiles |> List.filter (not << _.IsDestroyed)
+
+            refireTimeLeft <- refireTimeLeft - elapsedSec |> max 0f
+            if this.IsFiring && refireTimeLeft = 0f then
+                projectiles <- Projectile(getFirePos(), projectileVel) :: projectiles
+                refireTimeLeft <- refireTime
+
+        member _.Draw viewport spriteBatch =
+            projectiles |> List.iter (fun p -> (p :> IActor).Draw viewport spriteBatch)
+
 type GameState(exitFunc) =
     let stars = Array.init 100 (fun _ -> Star())
     let catShip = CatShip()
+    let catShipWeapon = Weapon(catShip.get_Pos)
     let mouseShip = MouseShip(catShip)
 
     let actors = [
         yield! stars |> Seq.cast<IActor>
         catShip
         mouseShip
+        catShipWeapon
     ]
 
     member _.HandleEvent (evt: GameEvent) =
         match evt with
         | CatShipDir dir -> catShip.SetDir dir
+        | CatShipFiring isFiring -> catShipWeapon.IsFiring <- isFiring
         | Exit -> exitFunc()
 
     member _.Update elapsedSec =

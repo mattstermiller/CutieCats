@@ -17,4 +17,5 @@ with
 
 type GameEvent =
     | CatShipDir of Vector2
+    | CatShipFiring of bool
     | Exit

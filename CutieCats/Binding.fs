@@ -6,10 +6,11 @@ open Microsoft.Xna.Framework.Input;
 
 type BindingSignals() =
     member val UpdateStart = Event<unit>()
-    member val CatShipUp = Signal<bool>(false)
-    member val CatShipDown = Signal<bool>(false)
-    member val CatShipRight = Signal<bool>(false)
-    member val CatShipLeft = Signal<bool>(false)
+    member val CatShipUp = Signal(false)
+    member val CatShipDown = Signal(false)
+    member val CatShipRight = Signal(false)
+    member val CatShipLeft = Signal(false)
+    member val CatShipFire = Signal(false)
     member val Exit = Event<unit>()
 with
     member this.gameEvents () =
@@ -24,6 +25,7 @@ with
                 |> Seq.fold (+) Vector2.Zero
                 |> CatShipDir
             )
+            this.CatShipFire |> Observable.map CatShipFiring
             this.Exit.Publish |> Observable.map (fun () -> Exit)
         ] |> Observable.Merge
 
@@ -38,4 +40,5 @@ module KeyBinding =
         Keys.L, signals.CatShipRight.Trigger
         Keys.Left, signals.CatShipLeft.Trigger
         Keys.H, signals.CatShipLeft.Trigger
+        Keys.Space, signals.CatShipFire.Trigger
     ]
