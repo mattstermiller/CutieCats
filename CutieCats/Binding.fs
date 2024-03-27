@@ -13,7 +13,7 @@ type BindingSignals() =
     member val CatShipFire = Signal(false)
     member val Exit = Event<unit>()
 with
-    member this.gameEvents () =
+    member this.inputEvents () =
         [
             this.UpdateStart.Publish |> Observable.map (fun () ->
                 seq {

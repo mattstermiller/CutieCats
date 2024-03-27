@@ -22,6 +22,7 @@ with
         PosTranslate = Vector2()
     }
 
+    // TODO: use fixed aspect ratio for game area, scale size proportionate to game height for both axes, add letterboxing to fit to screen
     static member Create(screenArea: Rectangle, cameraSize: Vector2, cameraCenter: Vector2, invertY) =
         let screenSize = screenArea.Size.ToVector2()
         let screenPos = screenArea.Location.ToVector2()

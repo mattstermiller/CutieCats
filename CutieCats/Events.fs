@@ -15,7 +15,11 @@ with
         | Right -> Vector2(1f, 0f)
         | Left -> Vector2(-1f, 0f)
 
-type GameEvent =
+type InputEvent =
     | CatShipDir of Vector2
     | CatShipFiring of bool
     | Exit
+
+type GameEvent =
+    | CatShipFire
+    | MouseShipHit of Vector2

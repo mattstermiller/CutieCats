@@ -5,8 +5,18 @@ open Microsoft.Xna.Framework.Graphics;
 open MonoGame.Extended
 open CutieCats
 
+type UpdateResult = {
+    GameEvents: GameEvent list
+    IsDestroyed: bool
+}
+with
+    static member None = { GameEvents = []; IsDestroyed = false }
+    static member Event event = { GameEvents = [event]; IsDestroyed = false }
+    static member Destroy = { GameEvents = []; IsDestroyed = true }
+    static member DestroyWithEvent event = { GameEvents = [event]; IsDestroyed = true }
+
 type IActor =
-    abstract member Update: elapsedSeconds: float32 -> unit
+    abstract member Update: elapsedSeconds: float32 -> UpdateResult
     abstract member Draw: Viewport -> SpriteBatch -> unit
 
 type Star() =
@@ -21,6 +31,7 @@ type Star() =
                 if x < 0f
                 then Vector2(x + 1f, random.NextSingle())
                 else Vector2(x, pos.Y)
+            UpdateResult.None
 
         member _.Draw viewport spriteBatch =
             spriteBatch.DrawPoint(viewport.GetScreenPos(pos), Color.Yellow, size)
@@ -37,6 +48,8 @@ type CatShip() =
 
     member _.Pos = pos
 
+    member _.GetWeaponPos () = pos + Vector2(size.Width / 2f, 0f)
+
     member _.SetDir (newDir: Vector2) = dir <- newDir
 
     interface IActor with
@@ -45,6 +58,7 @@ type CatShip() =
             pos <-
                 pos + (vel * elapsedSec)
                 |> fun v -> Vector2.Clamp(v, posMin, posMax)
+            UpdateResult.None
 
         member _.Draw viewport spriteBatch =
             spriteBatch.DrawEllipse(viewport.GetScreenPos(pos), viewport.GetScreenSize(radius), 20, Color.Orange, 20f)
@@ -65,71 +79,95 @@ type MouseShip(catShip: CatShip) =
             pos <-
                 pos + (vel * elapsedSec)
                 |> fun v -> Vector2.Clamp(v, posMin, posMax)
+            UpdateResult.None
 
         member _.Draw viewport spriteBatch =
             spriteBatch.DrawEllipse(viewport.GetScreenPos(pos), viewport.GetScreenSize(radius), 20, Color.Gray, 30f)
 
 type Projectile(initPos: Vector2, vel: Vector2) =
-    let mutable isDestroyed = false
     let mutable pos = initPos
     let size = Size2(0.02f, 0.015f)
 
     let radius = size/2f
-
-    member _.IsDestroyed = isDestroyed
 
     interface IActor with
         member _.Update elapsedSec =
             pos <- pos + vel * elapsedSec
             // TODO: detect collision and create Hit event
             if pos.X > (1.0f + size.Width) then
-                isDestroyed <- true
+                UpdateResult.Destroy
+            else
+                UpdateResult.None
 
         member _.Draw viewport spriteBatch =
             spriteBatch.DrawEllipse(viewport.GetScreenPos(pos), viewport.GetScreenSize(radius), 20, Color.Red, 5f)
 
-type Weapon(getFirePos) =
+type Weapon() =
     let refireTime = 0.5f
-    let projectileVel = Vector2(0.2f, 0f)
     let mutable refireTimeLeft = 0f
-    let mutable projectiles: Projectile list = []
 
     member val IsFiring = false with get, set
 
     interface IActor with
         member this.Update elapsedSec =
-            projectiles |> List.iter (fun p -> (p :> IActor).Update elapsedSec)
-            projectiles <- projectiles |> List.filter (not << _.IsDestroyed)
-
             refireTimeLeft <- refireTimeLeft - elapsedSec |> max 0f
             if this.IsFiring && refireTimeLeft = 0f then
-                projectiles <- Projectile(getFirePos(), projectileVel) :: projectiles
                 refireTimeLeft <- refireTime
+                UpdateResult.Event CatShipFire
+            else
+                UpdateResult.None
 
-        member _.Draw viewport spriteBatch =
-            projectiles |> List.iter (fun p -> (p :> IActor).Draw viewport spriteBatch)
+        member _.Draw viewport spriteBatch = ()
 
 type GameState(exitFunc) =
     let stars = Array.init 100 (fun _ -> Star())
     let catShip = CatShip()
-    let catShipWeapon = Weapon(catShip.get_Pos)
+    let catShipWeapon = Weapon()
     let mouseShip = MouseShip(catShip)
 
-    let actors = [
+    let mutable actors = [
         yield! stars |> Seq.cast<IActor>
         catShip
         mouseShip
         catShipWeapon
     ]
 
-    member _.HandleEvent (evt: GameEvent) =
-        match evt with
-        | CatShipDir dir -> catShip.SetDir dir
-        | CatShipFiring isFiring -> catShipWeapon.IsFiring <- isFiring
-        | Exit -> exitFunc()
+    let handleEvent (evt: GameEvent) : IActor list =
+        [
+            match evt with
+            | CatShipFire ->
+                let projectileVel = Vector2(0.2f, 0f)
+                yield Projectile(catShip.GetWeaponPos(), projectileVel)
+            | MouseShipHit pos ->
+                () // TODO
+        ]
+
+    member _.HandleInput (input: InputEvent) =
+        match input with
+        | CatShipDir dir ->
+            catShip.SetDir dir
+        | CatShipFiring isFiring ->
+            catShipWeapon.IsFiring <- isFiring
+        | Exit ->
+            exitFunc()
 
     member _.Update elapsedSec =
-        actors |> List.iter (fun a -> a.Update elapsedSec)
+        actors <- actors |> List.collect (fun actor ->
+            let result = actor.Update elapsedSec
+            [
+                if not result.IsDestroyed then
+                    actor
+                yield! result.GameEvents |> List.collect handleEvent
+            ]
+        )
+
+        // TODO: separate Update into phases (it's weird that the outcome could depend on ordering of actors, like a projectile hit could affect a ship before its update)
+        // - update (apply physics, fire weapon)
+        //      can add actors
+        // - collision detection and response
+        //      can remove actors
+        //      iterate over projectiles checking for collision with ships, shield, or no longer intersects world rect
+        //      probably doesn't need to consider newly created actors
 
     member _.Draw viewport spriteBatch =
         actors |> List.iter (fun a -> a.Draw viewport spriteBatch)

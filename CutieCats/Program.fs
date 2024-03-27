@@ -31,7 +31,7 @@ type CutieCatsGame() as this =
         let bindMap = KeyBinding.bindings signals
         keyEvents.Publish.Add (fun (key, pressed) -> bindMap.TryFind key |> Option.iter (fun f -> f pressed))
 
-        signals.gameEvents().Add(state.HandleEvent)
+        signals.inputEvents().Add(state.HandleInput)
 
     override __.Update(gameTime) =
         signals.UpdateStart.Trigger ()
