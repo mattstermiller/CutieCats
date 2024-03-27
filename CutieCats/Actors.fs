@@ -5,18 +5,8 @@ open Microsoft.Xna.Framework.Graphics;
 open MonoGame.Extended
 open CutieCats
 
-type UpdateResult = {
-    GameEvents: GameEvent list
-    IsDestroyed: bool
-}
-with
-    static member None = { GameEvents = []; IsDestroyed = false }
-    static member Event event = { GameEvents = [event]; IsDestroyed = false }
-    static member Destroy = { GameEvents = []; IsDestroyed = true }
-    static member DestroyWithEvent event = { GameEvents = [event]; IsDestroyed = true }
-
 type IActor =
-    abstract member Update: elapsedSeconds: float32 -> UpdateResult
+    abstract member Update: elapsedSeconds: float32 -> IActor list
     abstract member Draw: Viewport -> SpriteBatch -> unit
 
 type Star() =
@@ -31,10 +21,38 @@ type Star() =
                 if x < 0f
                 then Vector2(x + 1f, random.NextSingle())
                 else Vector2(x, pos.Y)
-            UpdateResult.None
+            []
 
         member _.Draw viewport spriteBatch =
             spriteBatch.DrawPoint(viewport.GetScreenPos(pos), Color.Yellow, size)
+
+type Projectile(initPos: Vector2, vel: Vector2) =
+    let mutable pos = initPos
+    let size = Size2(0.02f, 0.015f)
+
+    let radius = size/2f
+
+    interface IActor with
+        member _.Update elapsedSec =
+            pos <- pos + vel * elapsedSec
+            []
+
+        member _.Draw viewport spriteBatch =
+            spriteBatch.DrawEllipse(viewport.GetScreenPos(pos), viewport.GetScreenSize(radius), 20, Color.Red, 5f)
+
+type Weapon(getFirePos, vel) =
+    let refireTime = 0.5f
+    let mutable refireTimeLeft = 0f
+
+    member val IsFiring = false with get, set
+
+    member this.Update elapsedSec : IActor option =
+        refireTimeLeft <- refireTimeLeft - elapsedSec |> max 0f
+        if this.IsFiring && refireTimeLeft = 0f then
+            refireTimeLeft <- refireTime
+            Some (Projectile(getFirePos (), vel))
+        else
+            None
 
 type CatShip() =
     let size = Size2(0.08f, 0.08f)
@@ -46,19 +64,21 @@ type CatShip() =
     let posMin = radius.ToVector2()
     let posMax = Vector2.One - posMin
 
-    member _.Pos = pos
+    let getFirePos () = pos + Vector2(size.Width / 2f, 0f)
 
-    member _.GetWeaponPos () = pos + Vector2(size.Width / 2f, 0f)
+    member val Weapon = Weapon(getFirePos, Vector2(0.2f, 0f))
+
+    member _.Pos = pos
 
     member _.SetDir (newDir: Vector2) = dir <- newDir
 
     interface IActor with
-        member _.Update elapsedSec =
+        member this.Update elapsedSec =
             let vel = (Vector2.NormalizeOrZero dir) * speed
             pos <-
                 pos + (vel * elapsedSec)
                 |> fun v -> Vector2.Clamp(v, posMin, posMax)
-            UpdateResult.None
+            this.Weapon.Update elapsedSec |> Option.toList
 
         member _.Draw viewport spriteBatch =
             spriteBatch.DrawEllipse(viewport.GetScreenPos(pos), viewport.GetScreenSize(radius), 20, Color.Orange, 20f)
@@ -79,95 +99,41 @@ type MouseShip(catShip: CatShip) =
             pos <-
                 pos + (vel * elapsedSec)
                 |> fun v -> Vector2.Clamp(v, posMin, posMax)
-            UpdateResult.None
+            []
 
         member _.Draw viewport spriteBatch =
             spriteBatch.DrawEllipse(viewport.GetScreenPos(pos), viewport.GetScreenSize(radius), 20, Color.Gray, 30f)
 
-type Projectile(initPos: Vector2, vel: Vector2) =
-    let mutable pos = initPos
-    let size = Size2(0.02f, 0.015f)
-
-    let radius = size/2f
-
-    interface IActor with
-        member _.Update elapsedSec =
-            pos <- pos + vel * elapsedSec
-            // TODO: detect collision and create Hit event
-            if pos.X > (1.0f + size.Width) then
-                UpdateResult.Destroy
-            else
-                UpdateResult.None
-
-        member _.Draw viewport spriteBatch =
-            spriteBatch.DrawEllipse(viewport.GetScreenPos(pos), viewport.GetScreenSize(radius), 20, Color.Red, 5f)
-
-type Weapon() =
-    let refireTime = 0.5f
-    let mutable refireTimeLeft = 0f
-
-    member val IsFiring = false with get, set
-
-    interface IActor with
-        member this.Update elapsedSec =
-            refireTimeLeft <- refireTimeLeft - elapsedSec |> max 0f
-            if this.IsFiring && refireTimeLeft = 0f then
-                refireTimeLeft <- refireTime
-                UpdateResult.Event CatShipFire
-            else
-                UpdateResult.None
-
-        member _.Draw viewport spriteBatch = ()
-
 type GameState(exitFunc) =
     let stars = Array.init 100 (fun _ -> Star())
     let catShip = CatShip()
-    let catShipWeapon = Weapon()
     let mouseShip = MouseShip(catShip)
 
     let mutable actors = [
         yield! stars |> Seq.cast<IActor>
         catShip
         mouseShip
-        catShipWeapon
     ]
-
-    let handleEvent (evt: GameEvent) : IActor list =
-        [
-            match evt with
-            | CatShipFire ->
-                let projectileVel = Vector2(0.2f, 0f)
-                yield Projectile(catShip.GetWeaponPos(), projectileVel)
-            | MouseShipHit pos ->
-                () // TODO
-        ]
 
     member _.HandleInput (input: InputEvent) =
         match input with
         | CatShipDir dir ->
             catShip.SetDir dir
         | CatShipFiring isFiring ->
-            catShipWeapon.IsFiring <- isFiring
+            catShip.Weapon.IsFiring <- isFiring
         | Exit ->
             exitFunc()
 
     member _.Update elapsedSec =
-        actors <- actors |> List.collect (fun actor ->
-            let result = actor.Update elapsedSec
-            [
-                if not result.IsDestroyed then
-                    actor
-                yield! result.GameEvents |> List.collect handleEvent
-            ]
-        )
+        let newActors = actors |> List.collect (fun actor -> actor.Update elapsedSec)
 
-        // TODO: separate Update into phases (it's weird that the outcome could depend on ordering of actors, like a projectile hit could affect a ship before its update)
-        // - update (apply physics, fire weapon)
-        //      can add actors
-        // - collision detection and response
+        // TODO: collision detection and response
         //      can remove actors
-        //      iterate over projectiles checking for collision with ships, shield, or no longer intersects world rect
         //      probably doesn't need to consider newly created actors
+        //      iterate over projectiles checking for collision with ships, shield, or no longer intersects world rect
+        // let projectiles = actors |> Seq.choose (function :? Projectile as p -> Some p | _ -> None)
+
+        actors <- actors @ newActors
 
     member _.Draw viewport spriteBatch =
         actors |> List.iter (fun a -> a.Draw viewport spriteBatch)
