@@ -11,6 +11,7 @@ type Vector2 with
 
 type Size2 with
     member this.ToVector2 () = Vector2(this.Width, this.Height)
+    member this.ToPoint () = Point(int this.Width, int this.Height)
     member this.Scale (scale: Vector2) = Size2(this.Width * scale.X, this.Height * scale.Y)
 
 type RectangleF with

@@ -14,7 +14,7 @@ with
 
     member this.GetScreenRect (center: Vector2, size: Size2) =
         let topLeft = center + Vector2(-size.Width/2.f, size.Height/2.f)
-        RectangleF(this.GetScreenPos(topLeft).ToPoint2(), this.GetScreenSize(size))
+        Rectangle(this.GetScreenPos(topLeft).ToPoint(), this.GetScreenSize(size).ToPoint())
 
     static member Default = {
         SizeFactor = Vector2()

@@ -1,4 +1,4 @@
-open Microsoft.Xna.Framework
+﻿open Microsoft.Xna.Framework
 open Microsoft.Xna.Framework.Graphics;
 open Microsoft.Xna.Framework.Input;
 open MonoGame.Extended
@@ -8,11 +8,12 @@ type CutieCatsGame() as this =
     inherit Game()
 
     let graphics = new GraphicsDeviceManager(this)
-    let mutable spriteBatch = Unchecked.defaultof<SpriteBatch>
 
+    let mutable state = Unchecked.defaultof<GameState>
+    let mutable spriteBatch = Unchecked.defaultof<SpriteBatch>
     let mutable viewport = Viewport.Default
+
     let keyEvents = Event<Keys * bool>()
-    let state = GameState(this.Exit)
     let signals = BindingSignals ()
     let mutable pressedKeys = [||]
 
@@ -25,8 +26,18 @@ type CutieCatsGame() as this =
         pressedKeys <- newPressedKeys
 
     override __.LoadContent() =
+        graphics.PreferredBackBufferWidth <- 1280
+        graphics.PreferredBackBufferHeight <- 800
+        graphics.ApplyChanges()
+
         spriteBatch <- new SpriteBatch(this.GraphicsDevice)
         viewport <- Viewport.Create(this.GraphicsDevice.Viewport.Bounds, Vector2.One, Vector2.One/2f, true)
+
+        let textures = {
+            CutieCatShip = this.Content.Load "CutieCatShip"
+            MeanieMouseShip = this.Content.Load "MeanieMouseShip"
+        }
+        state <- GameState(textures, this.Exit)
 
         let bindMap = KeyBinding.bindings signals
         keyEvents.Publish.Add (fun (key, pressed) -> bindMap.TryFind key |> Option.iter (fun f -> f pressed))

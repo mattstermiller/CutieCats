@@ -9,6 +9,11 @@ type IActor =
     abstract member Update: elapsedSeconds: float32 -> IActor list
     abstract member Draw: Viewport -> SpriteBatch -> unit
 
+type Textures = {
+    CutieCatShip: Texture2D
+    MeanieMouseShip: Texture2D
+}
+
 type Star() =
     let size = random.NextSingle() * 4f + 2f
     let mutable pos = Vector2(random.NextSingle(), random.NextSingle())
@@ -28,12 +33,13 @@ type Star() =
 
 type Projectile(initPos: Vector2, vel: Vector2) =
     let mutable pos = initPos
-    let size = Size2(0.02f, 0.015f)
+    let size = Size2(0.04f, 0.01f)
+    let collisionSize = size / 2f
 
     let radius = size/2f
 
     member _.IsFacingEnemy = vel.X > 0f
-    member _.Rect = RectangleF.ofPosSize(pos, size)
+    member _.CollisionRect = RectangleF.ofPosSize(pos, collisionSize)
     member _.Damage = 0.12f
 
     interface IActor with
@@ -42,7 +48,8 @@ type Projectile(initPos: Vector2, vel: Vector2) =
             []
 
         member _.Draw viewport spriteBatch =
-            spriteBatch.DrawEllipse(viewport.GetScreenPos(pos), viewport.GetScreenSize(radius), 20, Color.Red, 5f)
+            let drawSize = viewport.GetScreenSize(radius)
+            spriteBatch.DrawEllipse(viewport.GetScreenPos(pos), drawSize, 20, Color.Red, drawSize.Height)
 
 type Weapon(getFirePos, vel) =
     let refireTime = 0.5f
@@ -58,8 +65,8 @@ type Weapon(getFirePos, vel) =
         else
             None
 
-type CatShip() =
-    let size = Size2(0.08f, 0.08f)
+type CatShip(texture) =
+    let size = Size2(0.1f, 0.1f)
     let initPos = Vector2(0.2f, 0.5f)
     let mutable pos = initPos
     let speed = 0.25f
@@ -75,7 +82,7 @@ type CatShip() =
         pos <- initPos
         dir <- Vector2.Zero
 
-    member val Weapon = Weapon(getFirePos, Vector2(0.2f, 0f))
+    member val Weapon = Weapon(getFirePos, Vector2(0.3f, 0f))
 
     member _.Pos = pos
 
@@ -90,9 +97,10 @@ type CatShip() =
             this.Weapon.Update elapsedSec |> Option.toList
 
         member _.Draw viewport spriteBatch =
-            spriteBatch.DrawEllipse(viewport.GetScreenPos(pos), viewport.GetScreenSize(radius), 20, Color.Orange, 20f)
+            // TODO: tint when hit
+            spriteBatch.Draw(texture, viewport.GetScreenRect(pos, size), Color.White)
 
-type MouseShip(catShip: CatShip) =
+type MouseShip(texture, catShip: CatShip) =
     let size = Size2(0.10f, 0.12f)
     let initPos = Vector2(0.85f, 0.5f)
     let mutable pos = initPos
@@ -107,7 +115,7 @@ type MouseShip(catShip: CatShip) =
         pos <- initPos
         health <- 1f
 
-    member _.Rect = RectangleF.ofPosSize(pos, size)
+    member _.CollisionRect = RectangleF.ofPosSize(pos, size)
 
     member _.Hit damage =
         health <- health - damage
@@ -123,21 +131,23 @@ type MouseShip(catShip: CatShip) =
             []
 
         member _.Draw viewport spriteBatch =
-            spriteBatch.DrawEllipse(viewport.GetScreenPos(pos), viewport.GetScreenSize(radius), 20, Color.Gray, 30f)
+            // TODO: tint when hit
+            spriteBatch.Draw(texture, viewport.GetScreenRect(pos, size), Color.White)
+
             // health bar
             let margin = 0.02f
             let maxWidth = 0.2f
             let height = 0.03f
             let barPos = viewport.GetScreenPos(Vector2(1.0f - margin - maxWidth, 1.0f - margin))
             let barSize = viewport.GetScreenSize(Vector2(maxWidth * health, height))
-            spriteBatch.DrawRectangle(RectangleF(barPos, barSize), Color.Red, barSize.Height)
+            spriteBatch.DrawRectangle(RectangleF(barPos, barSize), Color.Red, min barSize.Height barSize.Width)
 
-type GameState(exitFunc) =
+type GameState(textures: Textures, exitFunc) =
     let gameResetTime = 4f
 
     let stars = Array.init 100 (fun _ -> Star())
-    let catShip = CatShip()
-    let mouseShip = MouseShip(catShip)
+    let catShip = CatShip(textures.CutieCatShip)
+    let mouseShip = MouseShip(textures.MeanieMouseShip, catShip)
     let mutable gameResetTimer = None
 
     let mutable actors = []
@@ -183,7 +193,7 @@ type GameState(exitFunc) =
             actors
             |> List.choose (function :? Projectile as p -> Some p | _ -> None)
             |> List.iter (fun proj ->
-                if proj.IsFacingEnemy && mouseShip.Rect.Intersects(proj.Rect) then
+                if proj.IsFacingEnemy && mouseShip.CollisionRect.Intersects(proj.CollisionRect) then
                     destroyed.Add proj
                     if mouseShip.Hit proj.Damage then
                         destroyed.Add mouseShip
