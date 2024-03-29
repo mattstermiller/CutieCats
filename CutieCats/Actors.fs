@@ -66,7 +66,7 @@ type Weapon(getFirePos, vel) =
             None
 
 type CatShip(texture) =
-    let size = Size2(0.1f, 0.1f)
+    let size = Size2(0.1f, 0.075f)
     let initPos = Vector2(0.2f, 0.5f)
     let mutable pos = initPos
     let speed = 0.25f
@@ -101,7 +101,7 @@ type CatShip(texture) =
             spriteBatch.Draw(texture, viewport.GetScreenRect(pos, size), Color.White)
 
 type MouseShip(texture, catShip: CatShip) =
-    let size = Size2(0.10f, 0.12f)
+    let size = Size2(0.12f, 0.1f)
     let initPos = Vector2(0.85f, 0.5f)
     let mutable pos = initPos
     let speed = 0.1f

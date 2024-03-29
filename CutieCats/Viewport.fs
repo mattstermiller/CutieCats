@@ -3,35 +3,54 @@ namespace CutieCats
 open Microsoft.Xna.Framework
 open MonoGame.Extended
 
-type Viewport = {
-    SizeFactor: Vector2
-    PosFactor: Vector2
-    PosTranslate: Vector2
-}
-with
-    member this.GetScreenPos (pos: Vector2) = ((pos + this.PosTranslate) * this.PosFactor).Round 0
-    member this.GetScreenSize (size: Size2) = size.Scale this.SizeFactor
+type Viewport(screenArea: Rectangle, cameraSize: Vector2, cameraCenter: Vector2, invertY) =
+    let screenSize = screenArea.Size.ToVector2()
+    let screenPos = screenArea.Location.ToVector2()
+    let yFactor = Vector2(1f, if invertY then -1f else 1f)
+
+    let sizeFactor = screenSize / cameraSize
+    let posFactor = sizeFactor * yFactor
+    let posTranslate =
+        (cameraSize / 2f - cameraCenter) +
+        (screenPos * cameraSize) / screenSize * yFactor +
+        (if invertY then Vector2(0f, -cameraSize.Y) else Vector2.Zero)
+
+    member _.GetScreenPos (pos: Vector2) = ((pos + posTranslate) * posFactor).Round 0
+    member _.GetScreenSize (size: Size2) = size.Scale sizeFactor
 
     member this.GetScreenRect (center: Vector2, size: Size2) =
         let topLeft = center + Vector2(-size.Width/2.f, size.Height/2.f)
         Rectangle(this.GetScreenPos(topLeft).ToPoint(), this.GetScreenSize(size).ToPoint())
 
-    static member Default = {
-        SizeFactor = Vector2()
-        PosFactor = Vector2()
-        PosTranslate = Vector2()
-    }
+    // TODO: scale actor sizes to their texture size and game width using below functions
 
-    // TODO: use fixed aspect ratio for game area, scale size proportionate to game height for both axes, add letterboxing to fit to screen
-    static member Create(screenArea: Rectangle, cameraSize: Vector2, cameraCenter: Vector2, invertY) =
-        let screenSize = screenArea.Size.ToVector2()
-        let screenPos = screenArea.Location.ToVector2()
-        let yFactor = Vector2(1.f, if invertY then -1.f else 1.f)
-        let sizeFactor = screenSize / cameraSize
-        {   SizeFactor = sizeFactor
-            PosFactor = sizeFactor * yFactor
-            PosTranslate =
-                (cameraSize / 2.f - cameraCenter) +
-                (screenPos * cameraSize) / screenSize * yFactor +
-                (if invertY then Vector2(0.f, -cameraSize.Y) else Vector2.Zero)
-        }
+    // member this.GetCameraAspectRatio () =
+    // member this.ScaleTextureSizeToGameWidth texture gameWidth =
+
+    // Texture2D.GetAspectRatio texture =
+
+    (* NOTE calculations:
+        game: 1.0, 1.0
+        screen: 800, 600
+
+        actor image: 150, 100
+        actor game width: 0.1
+
+        actor screen width = 0.1 * 800 / 1.0 = 80
+        actor screen height = 80 / 150 * 100 = 53.33
+        actor game height = 53.33 / 600 * 1.0 = 0.0889
+
+        formulate equation using the variables...
+
+        actor game height =
+            agw * sx / gx / aix * aiy / sy * gy
+            (agw * sx * aiy * gy) / (gx * aix * sy)
+            agw / (aix/aiy) * (sx/sy) / (gx/gy)
+
+        viewport game aspect ratio =
+            (sx/sy) / (gx/gy)
+            (800/600) / (1.0/1.0)
+            1.333
+
+        actor game height = 0.1 / 1.5 * 1.333 = 0.0889
+    *)

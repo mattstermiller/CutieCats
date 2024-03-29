@@ -11,7 +11,7 @@ type CutieCatsGame() as this =
 
     let mutable state = Unchecked.defaultof<GameState>
     let mutable spriteBatch = Unchecked.defaultof<SpriteBatch>
-    let mutable viewport = Viewport.Default
+    let mutable viewport = Unchecked.defaultof<Viewport>
 
     let keyEvents = Event<Keys * bool>()
     let signals = BindingSignals ()
@@ -31,7 +31,9 @@ type CutieCatsGame() as this =
         graphics.ApplyChanges()
 
         spriteBatch <- new SpriteBatch(this.GraphicsDevice)
-        viewport <- Viewport.Create(this.GraphicsDevice.Viewport.Bounds, Vector2.One, Vector2.One/2f, true)
+
+        // TODO: support resizing screen, use fixed aspect ratio for screen area, add clipping or letterboxing to fit to screen
+        viewport <- Viewport(this.GraphicsDevice.Viewport.Bounds, Vector2.One, Vector2.One/2f, true)
 
         let textures = {
             CutieCatShip = this.Content.Load "CutieCatShip"
