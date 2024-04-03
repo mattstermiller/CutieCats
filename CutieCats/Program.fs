@@ -45,7 +45,6 @@ type CutieCatsGame() as this =
         signals.inputEvents().Add(state.HandleInput)
 
     override __.Update(gameTime) =
-        signals.UpdateStart.Trigger ()
         generateKeyEvents ()
         state.Update (gameTime.GetElapsedSeconds() |> single)
 

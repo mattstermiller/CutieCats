@@ -18,18 +18,4 @@ type RectangleF with
     static member ofPosSize(pos: Vector2, size: Size2) =
         RectangleF(Point2(pos.X, pos.Y) - size/2f, size)
 
-type Signal<'a>(initialValue: 'a) =
-    let evt = Event<'a>()
-    let obs = evt.Publish
-    let mutable value = initialValue
-
-    interface IObservable<'a> with
-        member _.Subscribe o = obs.Subscribe o
-
-    member _.Value = value
-
-    member _.Trigger newValue =
-        value <- newValue
-        evt.Trigger newValue
-
 let random = Random()

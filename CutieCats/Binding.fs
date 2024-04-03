@@ -5,27 +5,25 @@ open Microsoft.Xna.Framework
 open Microsoft.Xna.Framework.Input;
 
 type BindingSignals() =
-    member val UpdateStart = Event<unit>()
-    member val CatShipUp = Signal(false)
-    member val CatShipDown = Signal(false)
-    member val CatShipRight = Signal(false)
-    member val CatShipLeft = Signal(false)
-    member val CatShipFire = Signal(false)
+    member val CatShipUp = Event<bool>()
+    member val CatShipDown = Event<bool>()
+    member val CatShipRight = Event<bool>()
+    member val CatShipLeft = Event<bool>()
+    member val CatShipFire = Event<bool>()
     member val Exit = Event<unit>()
 with
     member this.inputEvents () =
         [
-            this.UpdateStart.Publish |> Observable.map (fun () ->
-                seq {
-                    if this.CatShipUp.Value then Up.Vec
-                    if this.CatShipDown.Value then Down.Vec
-                    if this.CatShipRight.Value then Right.Vec
-                    if this.CatShipLeft.Value then Left.Vec
-                }
-                |> Seq.fold (+) Vector2.Zero
-                |> CatShipDir
-            )
-            this.CatShipFire |> Observable.map CatShipFiring
+            Observable.Merge [|
+                this.CatShipUp.Publish |> Observable.map (fun v -> (Up, v))
+                this.CatShipDown.Publish |> Observable.map (fun v -> (Down, v))
+                this.CatShipRight.Publish |> Observable.map (fun v -> (Right, v))
+                this.CatShipLeft.Publish |> Observable.map (fun v -> (Left, v))
+            |]
+            |> Observable.scan (fun dirSet (dir, toggle) -> (if toggle then Set.add else Set.remove) dir dirSet) Set.empty
+            |> Observable.map (Seq.map (fun dir -> dir.Vec) >> Seq.fold (+) Vector2.Zero >> CatShipDir)
+
+            this.CatShipFire.Publish |> Observable.map CatShipFiring
             this.Exit.Publish |> Observable.map (fun () -> Exit)
         ] |> Observable.Merge
 
