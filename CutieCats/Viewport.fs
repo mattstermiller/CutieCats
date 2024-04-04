@@ -28,3 +28,5 @@ type Viewport(screenArea: Rectangle, cameraSize: Vector2, cameraCenter: Vector2,
     member _.ScaleTextureSizeToGameWidth (gameWidth: float32) (texture: Texture2D) =
         let gameHeight = gameWidth / texture.AspectRatio * cameraAspectRatio
         Size2(gameWidth, gameHeight)
+
+    member _.ScaleVector (v: Vector2) = Vector2(v.X, v.Y * cameraAspectRatio)

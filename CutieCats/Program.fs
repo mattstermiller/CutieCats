@@ -32,7 +32,8 @@ type CutieCatsGame() as this =
 
         spriteBatch <- new SpriteBatch(this.GraphicsDevice)
 
-        // TODO: support resizing screen, use fixed aspect ratio for screen area, add clipping or letterboxing to fit to screen
+        // TODO: use fixed aspect ratio (16/9) for screen and camera area, remove scaling size and vel from actors
+        // TODO: then support resizing screen, fit viewport into screen, add clipping or letterboxing to fill area outside of viewport
         viewport <- Viewport(this.GraphicsDevice.Viewport.Bounds, Vector2.One, Vector2.One/2f, true)
 
         let textures = {

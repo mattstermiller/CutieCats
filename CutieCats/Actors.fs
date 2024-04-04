@@ -70,7 +70,7 @@ type CatShip(texture: Texture2D, viewport: Viewport) =
     let initPos = Vector2(0.2f, 0.5f)
     let mutable pos = initPos
     let speed = 0.25f
-    let mutable dir = Vector2.Zero
+    let mutable vel = Vector2.Zero
 
     let radius = size/2f
     let posMin = radius.ToVector2()
@@ -80,17 +80,17 @@ type CatShip(texture: Texture2D, viewport: Viewport) =
 
     member _.Reset () =
         pos <- initPos
-        dir <- Vector2.Zero
+        vel <- Vector2.Zero
 
     member val Weapon = Weapon(getFirePos, Vector2(0.3f, 0f))
 
     member _.Pos = pos
 
-    member _.SetDir (newDir: Vector2) = dir <- newDir
+    member _.SetDir (dir: Vector2) =
+        vel <- dir |> Vector2.NormalizeOrZero |> viewport.ScaleVector |> (*) speed
 
     interface IActor with
         member this.Update elapsedSec =
-            let vel = (Vector2.NormalizeOrZero dir) * speed
             pos <-
                 pos + (vel * elapsedSec)
                 |> fun v -> Vector2.Clamp(v, posMin, posMax)
@@ -124,7 +124,7 @@ type MouseShip(texture: Texture2D, viewport: Viewport, catShip: CatShip) =
     interface IActor with
         member _.Update elapsedSec =
             let dir = Vector2(0f, catShip.Pos.Y - pos.Y) |> Vector2.NormalizeOrZero
-            let vel = dir * speed
+            let vel = dir |> viewport.ScaleVector |> (*) speed
             pos <-
                 pos + (vel * elapsedSec)
                 |> fun v -> Vector2.Clamp(v, posMin, posMax)
