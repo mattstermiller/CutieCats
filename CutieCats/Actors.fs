@@ -5,6 +5,11 @@ open Microsoft.Xna.Framework.Graphics;
 open MonoGame.Extended
 open CutieCats
 
+module GameWorld =
+    let rect = RectangleF(Point2.Zero, Size2(16f/9f, 1f))
+
+    let relativeToAbsPos (relPos: Vector2) = rect.Position + (rect.Size.Scale relPos) |> Vector2.ofPoint2
+
 type IActor =
     abstract member Update: elapsedSeconds: float32 -> IActor list
     abstract member Draw: Viewport -> SpriteBatch -> unit
@@ -16,7 +21,7 @@ type Textures = {
 
 type Star() =
     let size = random.NextSingle() * 4f + 2f
-    let mutable pos = Vector2(random.NextSingle(), random.NextSingle())
+    let mutable pos = Vector2(random.NextSingle(), random.NextSingle()) |> GameWorld.relativeToAbsPos
     let speed = 0.05f
 
     interface IActor with
@@ -24,7 +29,7 @@ type Star() =
             let x = pos.X - (speed * elapsedSec)
             pos <-
                 if x < 0f
-                then Vector2(x + 1f, random.NextSingle())
+                then Vector2(1f, random.NextSingle()) |> GameWorld.relativeToAbsPos
                 else Vector2(x, pos.Y)
             []
 
@@ -33,7 +38,7 @@ type Star() =
 
 type Projectile(initPos: Vector2, vel: Vector2) =
     let mutable pos = initPos
-    let size = Size2(0.04f, 0.01f)
+    let size = Size2(0.06f, 0.01f)
     let collisionSize = size / 2f
 
     let radius = size/2f
@@ -65,16 +70,14 @@ type Weapon(getFirePos, vel) =
         else
             None
 
-type CatShip(texture: Texture2D, viewport: Viewport) =
-    let size = viewport.ScaleTextureSizeToGameWidth 0.1f texture
-    let initPos = Vector2(0.2f, 0.5f)
+type CatShip(texture: Texture2D) =
+    let size = texture.Size2.ScaleToWidth 0.17f
+    let initPos = Vector2(0.2f, 0.5f) |> GameWorld.relativeToAbsPos
     let mutable pos = initPos
-    let speed = 0.25f
+    let speed = 0.35f
     let mutable vel = Vector2.Zero
 
-    let radius = size/2f
-    let posMin = radius.ToVector2()
-    let posMax = Vector2.One - posMin
+    let posBounds = GameWorld.rect |> RectangleF.inflatedBy (size * -1f)
 
     let getFirePos () = pos + Vector2(size.Width / 2f, 0f)
 
@@ -87,29 +90,25 @@ type CatShip(texture: Texture2D, viewport: Viewport) =
     member _.Pos = pos
 
     member _.SetDir (dir: Vector2) =
-        vel <- dir |> Vector2.NormalizeOrZero |> viewport.ScaleVector |> (*) speed
+        vel <- dir |> Vector2.normalizeOrZero |> (*) speed
 
     interface IActor with
         member this.Update elapsedSec =
-            pos <-
-                pos + (vel * elapsedSec)
-                |> fun v -> Vector2.Clamp(v, posMin, posMax)
+            pos <- pos + (vel * elapsedSec) |> Vector2.clampIn posBounds
             this.Weapon.Update elapsedSec |> Option.toList
 
         member _.Draw viewport spriteBatch =
             // TODO: tint when hit
             spriteBatch.Draw(texture, viewport.GetScreenRect(pos, size), Color.White)
 
-type MouseShip(texture: Texture2D, viewport: Viewport, catShip: CatShip) =
-    let size = viewport.ScaleTextureSizeToGameWidth 0.12f texture
-    let initPos = Vector2(0.85f, 0.5f)
+type MouseShip(texture: Texture2D, catShip: CatShip) =
+    let size = texture.Size2.ScaleToWidth 0.2f
+    let initPos = Vector2(0.85f, 0.5f) |> GameWorld.relativeToAbsPos
     let mutable pos = initPos
-    let speed = 0.1f
+    let speed = 0.15f
     let mutable health = 1f
 
-    let radius = size/2f
-    let posMin = radius.ToVector2()
-    let posMax = Vector2.One - posMin
+    let posBounds = GameWorld.rect |> RectangleF.inflatedBy (size * -1f)
 
     member _.Reset () =
         pos <- initPos
@@ -123,11 +122,9 @@ type MouseShip(texture: Texture2D, viewport: Viewport, catShip: CatShip) =
 
     interface IActor with
         member _.Update elapsedSec =
-            let dir = Vector2(0f, catShip.Pos.Y - pos.Y) |> Vector2.NormalizeOrZero
-            let vel = dir |> viewport.ScaleVector |> (*) speed
-            pos <-
-                pos + (vel * elapsedSec)
-                |> fun v -> Vector2.Clamp(v, posMin, posMax)
+            let dir = Vector2(0f, catShip.Pos.Y - pos.Y) |> Vector2.normalizeOrZero
+            let vel = dir * speed
+            pos <- pos + (vel * elapsedSec) |> Vector2.clampIn posBounds
             []
 
         member _.Draw viewport spriteBatch =
@@ -137,17 +134,17 @@ type MouseShip(texture: Texture2D, viewport: Viewport, catShip: CatShip) =
             // health bar
             let margin = 0.02f
             let maxWidth = 0.2f
-            let height = 0.03f
-            let barPos = viewport.GetScreenPos(Vector2(1.0f - margin - maxWidth, 1.0f - margin))
-            let barSize = viewport.GetScreenSize(Vector2(maxWidth * health, height))
+            let height = 0.02f
+            let barPos = Vector2(1f - margin - maxWidth, margin) * viewport.ScreenSize
+            let barSize = Size2(maxWidth * health, height).Scale viewport.ScreenSize
             spriteBatch.DrawRectangle(RectangleF(barPos, barSize), Color.Red, min barSize.Height barSize.Width)
 
-type GameState(textures: Textures, viewport: Viewport, exitFunc) =
+type GameState(textures: Textures, exitFunc) =
     let gameResetTime = 4f
 
     let stars = Array.init 100 (fun _ -> Star())
-    let catShip = CatShip(textures.CutieCatShip, viewport)
-    let mouseShip = MouseShip(textures.MeanieMouseShip, viewport, catShip)
+    let catShip = CatShip(textures.CutieCatShip)
+    let mouseShip = MouseShip(textures.MeanieMouseShip, catShip)
     let mutable gameResetTimer = None
 
     let mutable actors = []
@@ -201,5 +198,5 @@ type GameState(textures: Textures, viewport: Viewport, exitFunc) =
             )
             actors <- actors |> List.except destroyed
 
-    member _.Draw spriteBatch =
+    member _.Draw viewport spriteBatch =
         actors |> List.iter (fun a -> a.Draw viewport spriteBatch)

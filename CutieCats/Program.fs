@@ -27,20 +27,19 @@ type CutieCatsGame() as this =
 
     override __.LoadContent() =
         graphics.PreferredBackBufferWidth <- 1280
-        graphics.PreferredBackBufferHeight <- 800
+        graphics.PreferredBackBufferHeight <- 720
         graphics.ApplyChanges()
 
         spriteBatch <- new SpriteBatch(this.GraphicsDevice)
 
-        // TODO: use fixed aspect ratio (16/9) for screen and camera area, remove scaling size and vel from actors
-        // TODO: then support resizing screen, fit viewport into screen, add clipping or letterboxing to fill area outside of viewport
-        viewport <- Viewport(this.GraphicsDevice.Viewport.Bounds, Vector2.One, Vector2.One/2f, true)
+        // TODO: support resizing screen, fit viewport into screen, add clipping or letterboxing to fill area outside of viewport
+        viewport <- Viewport(this.GraphicsDevice.Viewport.Bounds, GameWorld.rect.Size, GameWorld.rect.Center, true)
 
         let textures = {
             CutieCatShip = this.Content.Load "CutieCatShip"
             MeanieMouseShip = this.Content.Load "MeanieMouseShip"
         }
-        state <- GameState(textures, viewport, this.Exit)
+        state <- GameState(textures, this.Exit)
 
         let bindMap = KeyBinding.bindings signals
         keyEvents.Publish.Add (fun (key, pressed) -> bindMap.TryFind key |> Option.iter (fun f -> f pressed))
@@ -55,7 +54,7 @@ type CutieCatsGame() as this =
         this.GraphicsDevice.Clear Color.Black
 
         spriteBatch.Begin()
-        state.Draw spriteBatch
+        state.Draw viewport spriteBatch
         spriteBatch.End()
 
 module Entry =
