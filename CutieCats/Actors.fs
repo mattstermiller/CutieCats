@@ -65,8 +65,8 @@ type Weapon(getFirePos, vel) =
         else
             None
 
-type CatShip(texture) =
-    let size = Size2(0.1f, 0.075f)
+type CatShip(texture: Texture2D, viewport: Viewport) =
+    let size = viewport.ScaleTextureSizeToGameWidth 0.1f texture
     let initPos = Vector2(0.2f, 0.5f)
     let mutable pos = initPos
     let speed = 0.25f
@@ -100,8 +100,8 @@ type CatShip(texture) =
             // TODO: tint when hit
             spriteBatch.Draw(texture, viewport.GetScreenRect(pos, size), Color.White)
 
-type MouseShip(texture, catShip: CatShip) =
-    let size = Size2(0.12f, 0.1f)
+type MouseShip(texture: Texture2D, viewport: Viewport, catShip: CatShip) =
+    let size = viewport.ScaleTextureSizeToGameWidth 0.12f texture
     let initPos = Vector2(0.85f, 0.5f)
     let mutable pos = initPos
     let speed = 0.1f
@@ -142,12 +142,12 @@ type MouseShip(texture, catShip: CatShip) =
             let barSize = viewport.GetScreenSize(Vector2(maxWidth * health, height))
             spriteBatch.DrawRectangle(RectangleF(barPos, barSize), Color.Red, min barSize.Height barSize.Width)
 
-type GameState(textures: Textures, exitFunc) =
+type GameState(textures: Textures, viewport: Viewport, exitFunc) =
     let gameResetTime = 4f
 
     let stars = Array.init 100 (fun _ -> Star())
-    let catShip = CatShip(textures.CutieCatShip)
-    let mouseShip = MouseShip(textures.MeanieMouseShip, catShip)
+    let catShip = CatShip(textures.CutieCatShip, viewport)
+    let mouseShip = MouseShip(textures.MeanieMouseShip, viewport, catShip)
     let mutable gameResetTimer = None
 
     let mutable actors = []
@@ -201,5 +201,5 @@ type GameState(textures: Textures, exitFunc) =
             )
             actors <- actors |> List.except destroyed
 
-    member _.Draw viewport spriteBatch =
+    member _.Draw spriteBatch =
         actors |> List.iter (fun a -> a.Draw viewport spriteBatch)

@@ -4,6 +4,7 @@ module Util
 open Microsoft.Xna.Framework
 open MonoGame.Extended
 open System
+open Microsoft.Xna.Framework.Graphics
 
 type Vector2 with
     member this.ToPoint2 () = Point2(this.X, this.Y)
@@ -17,5 +18,8 @@ type Size2 with
 type RectangleF with
     static member ofPosSize(pos: Vector2, size: Size2) =
         RectangleF(Point2(pos.X, pos.Y) - size/2f, size)
+
+type Texture2D with
+    member this.AspectRatio = float32 this.Width / float32 this.Height
 
 let random = Random()

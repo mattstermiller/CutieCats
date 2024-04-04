@@ -39,7 +39,7 @@ type CutieCatsGame() as this =
             CutieCatShip = this.Content.Load "CutieCatShip"
             MeanieMouseShip = this.Content.Load "MeanieMouseShip"
         }
-        state <- GameState(textures, this.Exit)
+        state <- GameState(textures, viewport, this.Exit)
 
         let bindMap = KeyBinding.bindings signals
         keyEvents.Publish.Add (fun (key, pressed) -> bindMap.TryFind key |> Option.iter (fun f -> f pressed))
@@ -54,7 +54,7 @@ type CutieCatsGame() as this =
         this.GraphicsDevice.Clear Color.Black
 
         spriteBatch.Begin()
-        state.Draw viewport spriteBatch
+        state.Draw spriteBatch
         spriteBatch.End()
 
 module Entry =
