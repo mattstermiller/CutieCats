@@ -36,10 +36,11 @@ type Star() =
         member _.Draw viewport spriteBatch =
             spriteBatch.DrawPoint(viewport.GetScreenPos(pos), Color.Yellow, size)
 
-type Projectile(initPos: Vector2, vel: Vector2) =
+type Projectile(initPos: Vector2, vel: Vector2, isEnemyWeapon) =
     let mutable pos = initPos
-    let size = Size2(0.06f, 0.01f)
+    let size = if isEnemyWeapon then Size2(0.04f, 0.04f) else Size2(0.06f, 0.01f)
     let collisionSize = size / 2f
+    let color = if isEnemyWeapon then Color.Red else Color.Cyan
 
     let radius = size/2f
 
@@ -54,21 +55,46 @@ type Projectile(initPos: Vector2, vel: Vector2) =
 
         member _.Draw viewport spriteBatch =
             let drawSize = viewport.GetScreenSize(radius)
-            spriteBatch.DrawEllipse(viewport.GetScreenPos(pos), drawSize, 20, Color.Red, drawSize.Height)
+            spriteBatch.DrawEllipse(viewport.GetScreenPos(pos), drawSize, 20, color, drawSize.Height)
 
-type Weapon(getFirePos, vel) =
-    let refireTime = 0.5f
+type Weapon(getFirePos, vel, refireTime, isEnemyWeapon) =
     let mutable refireTimeLeft = 0f
 
-    member val IsFiring = false with get, set
+    member val IsFiring = isEnemyWeapon with get, set
 
     member this.Update elapsedSec : IActor option =
         refireTimeLeft <- refireTimeLeft - elapsedSec |> max 0f
         if this.IsFiring && refireTimeLeft = 0f then
             refireTimeLeft <- refireTime
-            Some (Projectile(getFirePos (), vel))
+            Some (Projectile(getFirePos (), vel, isEnemyWeapon))
         else
             None
+
+type HealthBar(isEnemy: bool) =
+    let maxWidth = 0.2f
+    let height = 0.02f
+    let margin = 0.02f
+    let posX = if isEnemy then 1f - margin - maxWidth else margin
+    let pos = Vector2(posX, margin)
+    let color = if isEnemy then Color.Red else Color.Green
+    let mutable health = 1f
+
+    member _.Health = health
+
+    member _.Hit damage =
+        health <- health - damage
+        health < 0f
+
+    member _.Reset () = health <- 1f
+
+    member this.Draw (viewport: Viewport) (spriteBatch: SpriteBatch) =
+        let pos = pos * viewport.ScreenSize
+        let size = Size2(maxWidth * this.Health, height).Scale viewport.ScreenSize
+        spriteBatch.DrawRectangle(RectangleF(pos, size), color, min size.Height size.Width)
+
+type IShip =
+    abstract member CollisionRect: RectangleF
+    abstract member Hit: damage: float32 -> bool
 
 type CatShip(texture: Texture2D) =
     let size = texture.Size2.ScaleToWidth 0.17f
@@ -76,21 +102,23 @@ type CatShip(texture: Texture2D) =
     let mutable pos = initPos
     let speed = 0.35f
     let mutable vel = Vector2.Zero
+    let healthBar = HealthBar(false)
 
     let posBounds = GameWorld.rect |> RectangleF.inflatedBy (size * -1f)
 
     let getFirePos () = pos + Vector2(size.Width / 2f, 0f)
 
-    member _.Reset () =
-        pos <- initPos
-        vel <- Vector2.Zero
-
-    member val Weapon = Weapon(getFirePos, Vector2(0.3f, 0f))
+    member val Weapon = Weapon(getFirePos, Vector2(0.3f, 0f), 0.5f, false)
 
     member _.Pos = pos
 
     member _.SetDir (dir: Vector2) =
         vel <- dir |> Vector2.normalizeOrZero |> (*) speed
+
+    member _.Reset () =
+        pos <- initPos
+        vel <- Vector2.Zero
+        healthBar.Reset ()
 
     interface IActor with
         member this.Update elapsedSec =
@@ -100,44 +128,43 @@ type CatShip(texture: Texture2D) =
         member _.Draw viewport spriteBatch =
             // TODO: tint when hit
             spriteBatch.Draw(texture, viewport.GetScreenRect(pos, size), Color.White)
+            healthBar.Draw viewport spriteBatch
+
+    interface IShip with
+        member _.CollisionRect = RectangleF.ofPosSize(pos, size)
+        member _.Hit damage = healthBar.Hit damage
 
 type MouseShip(texture: Texture2D, catShip: CatShip) =
     let size = texture.Size2.ScaleToWidth 0.2f
     let initPos = Vector2(0.85f, 0.5f) |> GameWorld.relativeToAbsPos
     let mutable pos = initPos
     let speed = 0.15f
-    let mutable health = 1f
+    let healthBar = HealthBar(true)
+
+    let getFirePos () = pos + Vector2(-size.Width / 2f, 0f)
+    let weapon = Weapon(getFirePos, Vector2(-0.3f, 0f), 1f, true)
 
     let posBounds = GameWorld.rect |> RectangleF.inflatedBy (size * -1f)
 
     member _.Reset () =
         pos <- initPos
-        health <- 1f
-
-    member _.CollisionRect = RectangleF.ofPosSize(pos, size)
-
-    member _.Hit damage =
-        health <- health - damage
-        health < 0f
+        healthBar.Reset ()
 
     interface IActor with
         member _.Update elapsedSec =
             let dir = Vector2(0f, catShip.Pos.Y - pos.Y) |> Vector2.normalizeOrZero
             let vel = dir * speed
             pos <- pos + (vel * elapsedSec) |> Vector2.clampIn posBounds
-            []
+            weapon.Update elapsedSec |> Option.toList
 
         member _.Draw viewport spriteBatch =
             // TODO: tint when hit
             spriteBatch.Draw(texture, viewport.GetScreenRect(pos, size), Color.White)
+            healthBar.Draw viewport spriteBatch
 
-            // health bar
-            let margin = 0.02f
-            let maxWidth = 0.2f
-            let height = 0.02f
-            let barPos = Vector2(1f - margin - maxWidth, margin) * viewport.ScreenSize
-            let barSize = Size2(maxWidth * health, height).Scale viewport.ScreenSize
-            spriteBatch.DrawRectangle(RectangleF(barPos, barSize), Color.Red, min barSize.Height barSize.Width)
+    interface IShip with
+        member _.CollisionRect = RectangleF.ofPosSize(pos, size)
+        member _.Hit damage = healthBar.Hit damage
 
 type GameState(textures: Textures, exitFunc) =
     let gameResetTime = 4f
@@ -190,10 +217,11 @@ type GameState(textures: Textures, exitFunc) =
             actors
             |> List.choose (function :? Projectile as p -> Some p | _ -> None)
             |> List.iter (fun proj ->
-                if proj.IsFacingEnemy && mouseShip.CollisionRect.Intersects(proj.CollisionRect) then
+                let ship: IShip = if proj.IsFacingEnemy then mouseShip else catShip
+                if ship.CollisionRect.Intersects(proj.CollisionRect) then
                     destroyed.Add proj
-                    if mouseShip.Hit proj.Damage then
-                        destroyed.Add mouseShip
+                    if ship.Hit proj.Damage then
+                        destroyed.Add (ship :?> IActor)
                         gameResetTimer <- Some gameResetTime
             )
             actors <- actors |> List.except destroyed
