@@ -36,11 +36,9 @@ type Star() =
         member _.Draw viewport spriteBatch =
             spriteBatch.DrawPoint(viewport.GetScreenPos(pos), Color.Yellow, size)
 
-type Projectile(initPos: Vector2, vel: Vector2, isEnemyWeapon) =
+type Projectile(initPos: Vector2, vel: Vector2, size: Size2, color) =
     let mutable pos = initPos
-    let size = if isEnemyWeapon then Size2(0.04f, 0.04f) else Size2(0.06f, 0.01f)
     let collisionSize = size / 2f
-    let color = if isEnemyWeapon then Color.Red else Color.Cyan
 
     let radius = size/2f
 
@@ -57,18 +55,25 @@ type Projectile(initPos: Vector2, vel: Vector2, isEnemyWeapon) =
             let drawSize = viewport.GetScreenSize(radius)
             spriteBatch.DrawEllipse(viewport.GetScreenPos(pos), drawSize, 20, color, drawSize.Height)
 
-type Weapon(getFirePos, vel, refireTime, isEnemyWeapon) =
+type Weapon(getFirePos, refireTime, vel, size, color) =
     let mutable refireTimeLeft = 0f
 
-    member val IsFiring = isEnemyWeapon with get, set
+    member val IsFiring = false with get, set
 
     member this.Update elapsedSec : IActor option =
         refireTimeLeft <- refireTimeLeft - elapsedSec |> max 0f
         if this.IsFiring && refireTimeLeft = 0f then
             refireTimeLeft <- refireTime
-            Some (Projectile(getFirePos (), vel, isEnemyWeapon))
+            Some (Projectile(getFirePos (), vel, size, color))
         else
             None
+
+type CatWeapon(getFirePos) =
+    inherit Weapon(getFirePos, 0.8f, Vector2(0.6f, 0f), Size2(0.07f, 0.01f), Color.Cyan)
+
+type MouseWeapon(getFirePos) as this =
+    inherit Weapon(getFirePos, 0.5f, Vector2(-0.7f, 0f), Size2(0.07f, 0.08f), Color.Red)
+    do this.IsFiring <- true
 
 type HealthBar(isEnemy: bool) =
     let maxWidth = 0.2f
@@ -100,7 +105,7 @@ type CatShip(texture: Texture2D) =
     let size = texture.Size2.ScaleToWidth 0.17f
     let initPos = Vector2(0.2f, 0.5f) |> GameWorld.relativeToAbsPos
     let mutable pos = initPos
-    let speed = 0.35f
+    let speed = 0.4f
     let mutable vel = Vector2.Zero
     let healthBar = HealthBar(false)
 
@@ -108,7 +113,7 @@ type CatShip(texture: Texture2D) =
 
     let getFirePos () = pos + Vector2(size.Width / 2f, 0f)
 
-    member val Weapon = Weapon(getFirePos, Vector2(0.3f, 0f), 0.5f, false)
+    member val Weapon = CatWeapon(getFirePos)
 
     member _.Pos = pos
 
@@ -154,12 +159,12 @@ type MouseShip(texture: Texture2D, catShip: CatShip) =
     let initPos = Vector2(0.85f, 0.5f) |> GameWorld.relativeToAbsPos
     let mutable pos = initPos
     let posBounds = GameWorld.rect |> RectangleF.inflatedBy (size * -1f)
-    let speed = 0.15f
+    let speed = 0.35f
     let controller = MouseShipController(posBounds)
     let healthBar = HealthBar(true)
 
     let getFirePos () = pos + Vector2(-size.Width / 2f, 0f)
-    let weapon = Weapon(getFirePos, Vector2(-0.3f, 0f), 1f, true)
+    let weapon = MouseWeapon(getFirePos)
 
     member _.Reset () =
         pos <- initPos
