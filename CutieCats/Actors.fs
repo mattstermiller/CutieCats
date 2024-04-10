@@ -19,13 +19,21 @@ type Textures = {
     MeanieMouseShip: Texture2D
 }
 
+type ActorCollection(actors: IActor array) =
+    interface IActor with
+        member _.Update elapsedSec =
+            actors |> Seq.collect (fun a -> a.Update elapsedSec) |> Seq.toList
+
+        member _.Draw viewport spriteBatch =
+            actors |> Array.iter (fun a -> a.Draw viewport spriteBatch)
+
 type Star() =
     let size = random.NextSingle() * 4f + 2f
     let mutable pos = Vector2(random.NextSingle(), random.NextSingle()) |> GameWorld.relativeToAbsPos
     let speed = 0.05f
 
     interface IActor with
-        member _.Update(elapsedSec) =
+        member _.Update elapsedSec =
             let x = pos.X - (speed * elapsedSec)
             pos <-
                 if x < 0f
@@ -35,6 +43,9 @@ type Star() =
 
         member _.Draw viewport spriteBatch =
             spriteBatch.DrawPoint(viewport.GetScreenPos(pos), Color.Yellow, size)
+
+type StarSystem(count: int) =
+    inherit ActorCollection(Array.init count (fun _ -> Star()))
 
 type Projectile(initPos: Vector2, vel: Vector2, size: Size2, color) =
     let mutable pos = initPos
@@ -189,16 +200,16 @@ type MouseShip(texture: Texture2D, catShip: CatShip) =
 type GameState(textures: Textures, exitFunc) =
     let gameResetTime = 4f
 
-    let stars = Array.init 100 (fun _ -> Star())
+    let stars = StarSystem(200)
     let catShip = CatShip(textures.CutieCatShip)
     let mouseShip = MouseShip(textures.MeanieMouseShip, catShip)
     let mutable gameResetTimer = None
 
-    let mutable actors = []
+    let mutable actors: IActor list = []
 
     let init () =
         actors <- [
-            yield! stars |> Seq.cast<IActor>
+            stars
             catShip
             mouseShip
         ]
