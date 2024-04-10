@@ -19,6 +19,9 @@ type Size2 with
     member this.ScaleToWidth (width: float32) = Size2(width, this.Height * (width / this.Width))
 
 type RectangleF with
+    // Y axis is fipped in game world coords
+    member this.WorldBottom = this.Top
+    member this.WorldTop = this.Bottom
     static member inflatedBy (size: Size2) (rect: RectangleF) = RectangleF(rect.Position - size/2f, rect.Size + size)
     static member ofPosSize(pos: Vector2, size: Size2) = RectangleF(Point2(pos.X, pos.Y) - size/2f, size)
 

@@ -134,17 +134,32 @@ type CatShip(texture: Texture2D) =
         member _.CollisionRect = RectangleF.ofPosSize(pos, size)
         member _.Hit damage = healthBar.Hit damage
 
+type MouseShipController(posBounds: RectangleF) =
+    let mutable dir = if random.NextDouble() > 0.5 then Up.Vec else Down.Vec
+    let nextDesiredYDist () = random.NextSingle(0.05f, 0.25f)
+    let mutable desiredYDist = nextDesiredYDist ()
+
+    member _.GetDir (pos: Vector2) (catShipPos: Vector2) =
+        let yDistToCatShip = catShipPos.Y - pos.Y
+        // if pos has gone past desired distance from cat ship or has hit the world bounds, switch direction
+        if dir = Down.Vec && (yDistToCatShip > desiredYDist || pos.Y <= posBounds.WorldBottom)
+            || dir = Up.Vec && (yDistToCatShip < -desiredYDist || pos.Y >= posBounds.WorldTop)
+        then
+            dir <- dir * Vector2(0f, -1f)
+            desiredYDist <- nextDesiredYDist ()
+        dir
+
 type MouseShip(texture: Texture2D, catShip: CatShip) =
     let size = texture.Size2.ScaleToWidth 0.2f
     let initPos = Vector2(0.85f, 0.5f) |> GameWorld.relativeToAbsPos
     let mutable pos = initPos
+    let posBounds = GameWorld.rect |> RectangleF.inflatedBy (size * -1f)
     let speed = 0.15f
+    let controller = MouseShipController(posBounds)
     let healthBar = HealthBar(true)
 
     let getFirePos () = pos + Vector2(-size.Width / 2f, 0f)
     let weapon = Weapon(getFirePos, Vector2(-0.3f, 0f), 1f, true)
-
-    let posBounds = GameWorld.rect |> RectangleF.inflatedBy (size * -1f)
 
     member _.Reset () =
         pos <- initPos
@@ -152,7 +167,7 @@ type MouseShip(texture: Texture2D, catShip: CatShip) =
 
     interface IActor with
         member _.Update elapsedSec =
-            let dir = Vector2(0f, catShip.Pos.Y - pos.Y) |> Vector2.normalizeOrZero
+            let dir = controller.GetDir pos catShip.Pos
             let vel = dir * speed
             pos <- pos + (vel * elapsedSec) |> Vector2.clampIn posBounds
             weapon.Update elapsedSec |> Option.toList
