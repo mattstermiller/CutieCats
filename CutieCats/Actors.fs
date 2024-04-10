@@ -246,8 +246,8 @@ type GameState(textures: Textures, exitFunc) =
             // collisions
             let destroyed = ResizeArray<IActor>()
             actors
-            |> List.choose (function :? Projectile as p -> Some p | _ -> None)
-            |> List.iter (fun proj ->
+            |> Seq.ofType<Projectile>
+            |> Seq.iter (fun proj ->
                 let ship: IShip = if proj.IsFacingEnemy then mouseShip else catShip
                 if ship.CollisionRect.Intersects(proj.CollisionRect) then
                     destroyed.Add proj

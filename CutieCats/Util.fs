@@ -1,10 +1,21 @@
 [<AutoOpen>]
 module Util
 
-open Microsoft.Xna.Framework
-open MonoGame.Extended
 open System
+open System.Collections
+open Microsoft.Xna.Framework
 open Microsoft.Xna.Framework.Graphics
+open MonoGame.Extended
+
+module Seq =
+    let ofType<'a> (s: IEnumerable) =
+        seq {
+            let e = s.GetEnumerator()
+            while e.MoveNext() do
+                match e.Current with
+                | :? 'a as a -> yield a
+                | _ -> ()
+        }
 
 type Vector2 with
     member this.ToPoint2 () = Point2(this.X, this.Y)
