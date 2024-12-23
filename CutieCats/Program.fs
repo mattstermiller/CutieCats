@@ -3,6 +3,7 @@ open Microsoft.Xna.Framework.Graphics;
 open Microsoft.Xna.Framework.Input;
 open MonoGame.Extended
 open CutieCats
+open Microsoft.Xna.Framework.Audio
 
 type CutieCatsGame() as this =
     inherit Game()
@@ -35,11 +36,10 @@ type CutieCatsGame() as this =
         // TODO: support resizing screen, fit viewport into screen, add clipping or letterboxing to fill area outside of viewport
         viewport <- Viewport(this.GraphicsDevice.Viewport.Bounds, GameWorld.rect.Size, GameWorld.rect.Center, true)
 
-        let textures = {
-            CutieCatShip = this.Content.Load "CutieCatShip"
-            MeanieMouseShip = this.Content.Load "MeanieMouseShip"
-        }
-        state <- GameState(textures, this.Exit)
+        let textures = this.Content.LoadRecordItems<Textures> "content/textures"
+        let sounds = this.Content.LoadRecordItems<Sounds> "content/sounds"
+
+        state <- GameState(textures, sounds, this.Exit)
 
         let bindMap = KeyBinding.bindings signals
         keyEvents.Publish.Add (fun (key, pressed) -> bindMap.TryFind key |> Option.iter (fun f -> f pressed))

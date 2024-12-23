@@ -3,7 +3,9 @@ module Util
 
 open System
 open System.Collections
+open FSharp.Reflection
 open Microsoft.Xna.Framework
+open Microsoft.Xna.Framework.Content
 open Microsoft.Xna.Framework.Graphics
 open MonoGame.Extended
 
@@ -38,5 +40,16 @@ type RectangleF with
 
 type Texture2D with
     member this.Size2 = Size2(float32 this.Width, float32 this.Height)
+
+type ContentManager with
+    member this.LoadRecordItems<'record> directory =
+        let loadMethod = typeof<ContentManager>.GetMethod("Load")
+        let path name =
+            IO.Path.Combine(directory, name)
+        FSharpType.GetRecordFields(typeof<'record>)
+        |> Array.map (fun field ->
+            loadMethod.MakeGenericMethod([|field.PropertyType|]).Invoke(this, [|path field.Name|])
+        )
+        |> fun args -> FSharpValue.MakeRecord(typeof<'record>, args) :?> 'record
 
 let random = Random()

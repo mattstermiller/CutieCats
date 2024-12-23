@@ -1,6 +1,8 @@
 namespace CutieCats
 
+open Acadian.FSharp
 open Microsoft.Xna.Framework
+open Microsoft.Xna.Framework.Audio
 open Microsoft.Xna.Framework.Graphics;
 open MonoGame.Extended
 open CutieCats
@@ -17,6 +19,20 @@ type IActor =
 type Textures = {
     CutieCatShip: Texture2D
     MeanieMouseShip: Texture2D
+}
+
+type Sounds = {
+    CatLaser: SoundEffect
+    CatShieldUp: SoundEffect
+    CatShieldDown: SoundEffect
+    CatShieldHit: SoundEffect
+    CatShipHit: SoundEffect
+    CatShipExplode: SoundEffect
+    CatTaunt: SoundEffect
+    MouseFire: SoundEffect
+    MouseShipHit: SoundEffect
+    MouseShipExplode: SoundEffect
+    MouseTaunt: SoundEffect
 }
 
 type ActorCollection(actors: IActor array) =
@@ -66,7 +82,7 @@ type Projectile(initPos: Vector2, vel: Vector2, size: Size2, color) =
             let drawSize = viewport.GetScreenSize(radius)
             spriteBatch.DrawEllipse(viewport.GetScreenPos(pos), drawSize, 20, color, drawSize.Height)
 
-type Weapon(getFirePos, refireTime, vel, size, color) =
+type Weapon(getFirePos, refireTime, vel, size, color, sound: SoundEffect) =
     let mutable refireTimeLeft = 0f
 
     member val IsFiring = false with get, set
@@ -75,15 +91,16 @@ type Weapon(getFirePos, refireTime, vel, size, color) =
         refireTimeLeft <- refireTimeLeft - elapsedSec |> max 0f
         if this.IsFiring && refireTimeLeft = 0f then
             refireTimeLeft <- refireTime
+            sound.Play() |> ignore
             Some (Projectile(getFirePos (), vel, size, color))
         else
             None
 
-type CatWeapon(getFirePos) =
-    inherit Weapon(getFirePos, 0.8f, Vector2(0.6f, 0f), Size2(0.07f, 0.01f), Color.Cyan)
+type CatWeapon(getFirePos, sound) =
+    inherit Weapon(getFirePos, 0.8f, Vector2(0.6f, 0f), Size2(0.07f, 0.01f), Color.Cyan, sound)
 
-type MouseWeapon(getFirePos) as this =
-    inherit Weapon(getFirePos, 0.5f, Vector2(-0.7f, 0f), Size2(0.07f, 0.08f), Color.Red)
+type MouseWeapon(getFirePos, sound) as this =
+    inherit Weapon(getFirePos, 0.5f, Vector2(-0.7f, 0f), Size2(0.07f, 0.08f), Color.Red, sound)
     do this.IsFiring <- true
 
 type HealthBar(isEnemy: bool) =
@@ -112,7 +129,7 @@ type IShip =
     abstract member CollisionRect: RectangleF
     abstract member Hit: damage: float32 -> bool
 
-type CatShip(texture: Texture2D) =
+type CatShip(texture: Texture2D, sounds: Sounds) =
     let size = texture.Size2.ScaleToWidth 0.17f
     let initPos = Vector2(0.2f, 0.5f) |> GameWorld.relativeToAbsPos
     let mutable pos = initPos
@@ -124,7 +141,7 @@ type CatShip(texture: Texture2D) =
 
     let getFirePos () = pos + Vector2(size.Width / 2f, 0f)
 
-    member val Weapon = CatWeapon(getFirePos)
+    member val Weapon = CatWeapon(getFirePos, sounds.CatLaser)
 
     member _.Pos = pos
 
@@ -148,7 +165,12 @@ type CatShip(texture: Texture2D) =
 
     interface IShip with
         member _.CollisionRect = RectangleF.ofPosSize(pos, size)
-        member _.Hit damage = healthBar.Hit damage
+
+        member _.Hit damage =
+            healthBar.Hit damage
+            |>! fun destroyed ->
+                if destroyed then sounds.CatShipExplode else sounds.CatShipHit
+                |> fun sound -> sound.Play() |> ignore
 
 type MouseShipController(posBounds: RectangleF) =
     let mutable dir = if random.NextDouble() > 0.5 then Up.Vec else Down.Vec
@@ -165,7 +187,7 @@ type MouseShipController(posBounds: RectangleF) =
             desiredYDist <- nextDesiredYDist ()
         dir
 
-type MouseShip(texture: Texture2D, catShip: CatShip) =
+type MouseShip(texture: Texture2D, sounds: Sounds, catShip: CatShip) =
     let size = texture.Size2.ScaleToWidth 0.2f
     let initPos = Vector2(0.85f, 0.5f) |> GameWorld.relativeToAbsPos
     let mutable pos = initPos
@@ -175,7 +197,7 @@ type MouseShip(texture: Texture2D, catShip: CatShip) =
     let healthBar = HealthBar(true)
 
     let getFirePos () = pos + Vector2(-size.Width / 2f, 0f)
-    let weapon = MouseWeapon(getFirePos)
+    let weapon = MouseWeapon(getFirePos, sounds.MouseFire)
 
     member _.Reset () =
         pos <- initPos
@@ -195,14 +217,19 @@ type MouseShip(texture: Texture2D, catShip: CatShip) =
 
     interface IShip with
         member _.CollisionRect = RectangleF.ofPosSize(pos, size)
-        member _.Hit damage = healthBar.Hit damage
 
-type GameState(textures: Textures, exitFunc) =
+        member _.Hit damage =
+            healthBar.Hit damage
+            |>! fun destroyed ->
+                if destroyed then sounds.MouseShipExplode else sounds.MouseShipHit
+                |> fun sound -> sound.Play() |> ignore
+
+type GameState(textures: Textures, sounds: Sounds, exitFunc) =
     let gameResetTime = 4f
 
     let stars = StarSystem(200)
-    let catShip = CatShip(textures.CutieCatShip)
-    let mouseShip = MouseShip(textures.MeanieMouseShip, catShip)
+    let catShip = CatShip(textures.CutieCatShip, sounds)
+    let mouseShip = MouseShip(textures.MeanieMouseShip, sounds, catShip)
     let mutable gameResetTimer = None
 
     let mutable actors: IActor list = []
