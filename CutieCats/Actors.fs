@@ -8,9 +8,9 @@ open MonoGame.Extended
 open CutieCats
 
 module GameWorld =
-    let rect = RectangleF(Point2.Zero, Size2(16f/9f, 1f))
+    let rect = RectangleF(Vector2.Zero, SizeF(16f/9f, 1f))
 
-    let relativeToAbsPos (relPos: Vector2) = rect.Position + (rect.Size.Scale relPos) |> Vector2.ofPoint2
+    let relativeToAbsPos (relPos: Vector2) = rect.Position + rect.Size.Scale(relPos).ToVector2()
 
 type IActor =
     abstract member Update: elapsedSeconds: float32 -> IActor list
@@ -63,7 +63,7 @@ type Star() =
 type StarSystem(count: int) =
     inherit ActorCollection(Array.init count (fun _ -> Star()))
 
-type Projectile(initPos: Vector2, vel: Vector2, size: Size2, color) =
+type Projectile(initPos: Vector2, vel: Vector2, size: SizeF, color) =
     let mutable pos = initPos
     let collisionSize = size / 2f
 
@@ -97,10 +97,10 @@ type Weapon(getFirePos, refireTime, vel, size, color, sound: SoundEffect) =
             None
 
 type CatWeapon(getFirePos, sound) =
-    inherit Weapon(getFirePos, 0.8f, Vector2(0.6f, 0f), Size2(0.07f, 0.01f), Color.Cyan, sound)
+    inherit Weapon(getFirePos, 0.8f, Vector2(0.6f, 0f), SizeF(0.07f, 0.01f), Color.Cyan, sound)
 
 type MouseWeapon(getFirePos, sound) as this =
-    inherit Weapon(getFirePos, 0.5f, Vector2(-0.7f, 0f), Size2(0.07f, 0.08f), Color.Red, sound)
+    inherit Weapon(getFirePos, 0.5f, Vector2(-0.7f, 0f), SizeF(0.07f, 0.08f), Color.Red, sound)
     do this.IsFiring <- true
 
 type HealthBar(isEnemy: bool) =
@@ -122,7 +122,7 @@ type HealthBar(isEnemy: bool) =
 
     member this.Draw (viewport: Viewport) (spriteBatch: SpriteBatch) =
         let pos = pos * viewport.ScreenSize
-        let size = Size2(maxWidth * this.Health, height).Scale viewport.ScreenSize
+        let size = SizeF(maxWidth * this.Health, height).Scale viewport.ScreenSize
         spriteBatch.DrawRectangle(RectangleF(pos, size), color, min size.Height size.Width)
 
 type IShip =
@@ -130,7 +130,7 @@ type IShip =
     abstract member Hit: damage: float32 -> bool
 
 type CatShip(texture: Texture2D, sounds: Sounds) =
-    let size = texture.Size2.ScaleToWidth 0.17f
+    let size = texture.SizeF.ScaleToWidth 0.17f
     let initPos = Vector2(0.2f, 0.5f) |> GameWorld.relativeToAbsPos
     let mutable pos = initPos
     let speed = 0.4f
@@ -188,7 +188,7 @@ type MouseShipController(posBounds: RectangleF) =
         dir
 
 type MouseShip(texture: Texture2D, sounds: Sounds, catShip: CatShip) =
-    let size = texture.Size2.ScaleToWidth 0.2f
+    let size = texture.SizeF.ScaleToWidth 0.2f
     let initPos = Vector2(0.85f, 0.5f) |> GameWorld.relativeToAbsPos
     let mutable pos = initPos
     let posBounds = GameWorld.rect |> RectangleF.inflatedBy (size * -1f)

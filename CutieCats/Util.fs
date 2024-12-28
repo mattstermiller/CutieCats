@@ -19,27 +19,27 @@ module Seq =
                 | _ -> ()
         }
 
-type Vector2 with
-    member this.ToPoint2 () = Point2(this.X, this.Y)
-    static member normalizeOrZero (v: Vector2) = if v = Vector2.Zero then v else v |> Vector2.Normalize
-    static member clampIn (rect: RectangleF) (v: Vector2) = Vector2.Clamp(v, rect.Position, rect.Position + rect.Size)
-    static member ofPoint2 (p: Point2) = Vector2(p.X, p.Y)
-
-type Size2 with
+type SizeF with
     member this.ToVector2 () = Vector2(this.Width, this.Height)
     member this.ToPoint () = Point(int this.Width, int this.Height)
-    member this.Scale (scale: Vector2) = Size2(this.Width * scale.X, this.Height * scale.Y)
-    member this.ScaleToWidth (width: float32) = Size2(width, this.Height * (width / this.Width))
+    member this.Scale (scale: Vector2) = SizeF(this.Width * scale.X, this.Height * scale.Y)
+    member this.ScaleToWidth (width: float32) = SizeF(width, this.Height * (width / this.Width))
+
+type Vector2 with
+    member this.ToPoint () = Point(int this.X, int this.Y)
+    static member normalizeOrZero (v: Vector2) = if v = Vector2.Zero then v else v |> Vector2.Normalize
+    static member clampIn (rect: RectangleF) (v: Vector2) = Vector2.Clamp(v, rect.Position, rect.Position + rect.Size.ToVector2())
+    static member ofPoint (p: Point) = Vector2(float32 p.X, float32 p.Y)
 
 type RectangleF with
     // Y axis is fipped in game world coords
     member this.WorldBottom = this.Top
     member this.WorldTop = this.Bottom
-    static member inflatedBy (size: Size2) (rect: RectangleF) = RectangleF(rect.Position - size/2f, rect.Size + size)
-    static member ofPosSize(pos: Vector2, size: Size2) = RectangleF(Point2(pos.X, pos.Y) - size/2f, size)
+    static member inflatedBy (size: SizeF) (rect: RectangleF) = RectangleF(rect.Position - size/2f, rect.Size + size)
+    static member ofPosSize(pos: Vector2, size: SizeF) = RectangleF(pos - size/2f, size)
 
 type Texture2D with
-    member this.Size2 = Size2(float32 this.Width, float32 this.Height)
+    member this.SizeF = SizeF(float32 this.Width, float32 this.Height)
 
 type ContentManager with
     member this.LoadRecordItems<'record> directory =

@@ -9,7 +9,7 @@
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build",
-      "program": "${workspaceFolder}/CutieCats/bin/Debug/net8.0/CutieCats.exe",
+      "program": "${workspaceFolder}/CutieCats/bin/Debug/net9.0/CutieCats.exe",
       "args": [],
       "cwd": "${workspaceFolder}",
       "stopAtEntry": false,

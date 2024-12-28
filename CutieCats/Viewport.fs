@@ -18,8 +18,8 @@ type Viewport(screenArea: Rectangle, cameraSize: Vector2, cameraCenter: Vector2,
     member _.ScreenSize = screenSize
 
     member _.GetScreenPos (gamePos: Vector2) = ((gamePos + posTranslate) * posFactor).Round 0
-    member _.GetScreenSize (gameSize: Size2) = gameSize.Scale sizeFactor
+    member _.GetScreenSize (gameSize: SizeF) = gameSize.Scale sizeFactor
 
-    member this.GetScreenRect (center: Vector2, size: Size2) =
+    member this.GetScreenRect (center: Vector2, size: SizeF) =
         let topLeft = center + Vector2(-size.Width/2f, size.Height/2f)
         Rectangle(this.GetScreenPos(topLeft).ToPoint(), this.GetScreenSize(size).ToPoint())
