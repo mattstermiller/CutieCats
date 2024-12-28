@@ -3,7 +3,7 @@ open Microsoft.Xna.Framework.Graphics;
 open Microsoft.Xna.Framework.Input;
 open MonoGame.Extended
 open CutieCats
-open Microsoft.Xna.Framework.Audio
+open MonoGame.Extended.ViewportAdapters
 
 type CutieCatsGame() as this =
     inherit Game()
@@ -13,6 +13,7 @@ type CutieCatsGame() as this =
     let mutable state = Unchecked.defaultof<GameState>
     let mutable spriteBatch = Unchecked.defaultof<SpriteBatch>
     let mutable viewport = Unchecked.defaultof<Viewport>
+    let mutable camera = Unchecked.defaultof<OrthographicCamera>
 
     let keyEvents = Event<Keys * bool>()
     let signals = BindingSignals ()
@@ -26,11 +27,20 @@ type CutieCatsGame() as this =
         |> Seq.iter keyEvents.Trigger
         pressedKeys <- newPressedKeys
 
-    override __.LoadContent() =
+    override _.Initialize() =
+        base.Initialize()
+
         graphics.PreferredBackBufferWidth <- 1280
         graphics.PreferredBackBufferHeight <- 720
         graphics.ApplyChanges()
 
+        camera <-
+            // TODO: rework positions and sizes based on this new virtual space instead of 1, 1
+            new BoxingViewportAdapter(this.Window, this.GraphicsDevice, 1600, 900)
+            |> OrthographicCamera
+
+
+    override _.LoadContent() =
         spriteBatch <- new SpriteBatch(this.GraphicsDevice)
 
         // TODO: support resizing screen, fit viewport into screen, add clipping or letterboxing to fill area outside of viewport
@@ -46,15 +56,15 @@ type CutieCatsGame() as this =
 
         signals.inputEvents().Add(state.HandleInput)
 
-    override __.Update(gameTime) =
+    override _.Update(gameTime) =
         generateKeyEvents ()
         state.Update (gameTime.GetElapsedSeconds() |> single)
 
-    override __.Draw(gameTime) =
+    override _.Draw(gameTime) =
         this.GraphicsDevice.Clear Color.Black
 
-        spriteBatch.Begin()
-        state.Draw viewport spriteBatch
+        spriteBatch.Begin(transformMatrix = camera.GetViewMatrix())
+        state.Draw spriteBatch
         spriteBatch.End()
 
 module Entry =

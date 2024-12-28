@@ -38,6 +38,9 @@ type RectangleF with
     static member inflatedBy (size: SizeF) (rect: RectangleF) = RectangleF(rect.Position - size/2f, rect.Size + size)
     static member ofPosSize(pos: Vector2, size: SizeF) = RectangleF(pos - size/2f, size)
 
+type Rectangle with
+    static member ofPosSize(pos: Vector2, size: SizeF) = Rectangle((pos - size/2f).ToPoint(), size.ToPoint())
+
 type Texture2D with
     member this.SizeF = SizeF(float32 this.Width, float32 this.Height)
 

@@ -14,7 +14,7 @@ module GameWorld =
 
 type IActor =
     abstract member Update: elapsedSeconds: float32 -> IActor list
-    abstract member Draw: Viewport -> SpriteBatch -> unit
+    abstract member Draw: SpriteBatch -> unit
 
 type Textures = {
     CutieCatShip: Texture2D
@@ -40,8 +40,8 @@ type ActorCollection(actors: IActor array) =
         member _.Update elapsedSec =
             actors |> Seq.collect (fun a -> a.Update elapsedSec) |> Seq.toList
 
-        member _.Draw viewport spriteBatch =
-            actors |> Array.iter (fun a -> a.Draw viewport spriteBatch)
+        member _.Draw spriteBatch =
+            actors |> Array.iter (fun a -> a.Draw spriteBatch)
 
 type Star() =
     let size = random.NextSingle() * 4f + 2f
@@ -57,8 +57,8 @@ type Star() =
                 else Vector2(x, pos.Y)
             []
 
-        member _.Draw viewport spriteBatch =
-            spriteBatch.DrawPoint(viewport.GetScreenPos(pos), Color.Yellow, size)
+        member _.Draw spriteBatch =
+            spriteBatch.DrawPoint(pos, Color.Yellow, size)
 
 type StarSystem(count: int) =
     inherit ActorCollection(Array.init count (fun _ -> Star()))
@@ -78,9 +78,8 @@ type Projectile(initPos: Vector2, vel: Vector2, size: SizeF, color) =
             pos <- pos + vel * elapsedSec
             []
 
-        member _.Draw viewport spriteBatch =
-            let drawSize = viewport.GetScreenSize(radius)
-            spriteBatch.DrawEllipse(viewport.GetScreenPos(pos), drawSize, 20, color, drawSize.Height)
+        member _.Draw spriteBatch =
+            spriteBatch.DrawEllipse(pos, radius, 20, color, radius.Height)
 
 type Weapon(getFirePos, refireTime, vel, size, color, sound: SoundEffect) =
     let mutable refireTimeLeft = 0f
@@ -120,9 +119,8 @@ type HealthBar(isEnemy: bool) =
 
     member _.Reset () = health <- 1f
 
-    member this.Draw (viewport: Viewport) (spriteBatch: SpriteBatch) =
-        let pos = pos * viewport.ScreenSize
-        let size = SizeF(maxWidth * this.Health, height).Scale viewport.ScreenSize
+    member this.Draw (spriteBatch: SpriteBatch) =
+        let size = SizeF(maxWidth * this.Health, height)
         spriteBatch.DrawRectangle(RectangleF(pos, size), color, min size.Height size.Width)
 
 type IShip =
@@ -158,10 +156,10 @@ type CatShip(texture: Texture2D, sounds: Sounds) =
             pos <- pos + (vel * elapsedSec) |> Vector2.clampIn posBounds
             this.Weapon.Update elapsedSec |> Option.toList
 
-        member _.Draw viewport spriteBatch =
+        member _.Draw spriteBatch =
             // TODO: tint when hit
-            spriteBatch.Draw(texture, viewport.GetScreenRect(pos, size), Color.White)
-            healthBar.Draw viewport spriteBatch
+            spriteBatch.Draw(texture, Rectangle.ofPosSize(pos, size), Color.White)
+            healthBar.Draw spriteBatch
 
     interface IShip with
         member _.CollisionRect = RectangleF.ofPosSize(pos, size)
@@ -210,10 +208,10 @@ type MouseShip(texture: Texture2D, sounds: Sounds, catShip: CatShip) =
             pos <- pos + (vel * elapsedSec) |> Vector2.clampIn posBounds
             weapon.Update elapsedSec |> Option.toList
 
-        member _.Draw viewport spriteBatch =
+        member _.Draw spriteBatch =
             // TODO: tint when hit
-            spriteBatch.Draw(texture, viewport.GetScreenRect(pos, size), Color.White)
-            healthBar.Draw viewport spriteBatch
+            spriteBatch.Draw(texture, Rectangle.ofPosSize(pos, size), Color.White)
+            healthBar.Draw spriteBatch
 
     interface IShip with
         member _.CollisionRect = RectangleF.ofPosSize(pos, size)
@@ -284,5 +282,5 @@ type GameState(textures: Textures, sounds: Sounds, exitFunc) =
             )
             actors <- actors |> List.except destroyed
 
-    member _.Draw viewport spriteBatch =
-        actors |> List.iter (fun a -> a.Draw viewport spriteBatch)
+    member _.Draw spriteBatch =
+        actors |> List.iter (fun a -> a.Draw spriteBatch)
